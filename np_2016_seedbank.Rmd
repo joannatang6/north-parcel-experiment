@@ -1,0 +1,44 @@
+---
+title: "north-parcel-experiment"
+author: "Joanna Tang"
+date: "11/14/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+# Loading packages, read in np_2016_seedbank.csv data
+library(tidyverse)
+library(janitor)
+np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
+
+
+# Make separate dataframes for each site
+ph1_seedbank_master <- np_2016_seedbank_master %>% 
+  filter(Plot == "PH1")
+ph1 <- ph1[, colSums(ph1 !=0) >0]
+
+ms <- np_2016_seedbank_master %>% 
+  filter(Plot == "MS")
+
+rt <- np_2016_seedbank_master %>% 
+  filter(Plot == "RT")
+
+tp <- np_2016_seedbank_master %>% 
+  filter(Plot == "TP")
+
+wt1 <- np_2016_seedbank_master %>% 
+  filter(Plot == "WT1")
+
+wt2 <- np_monitoring_master %>% 
+  filter(Plot == "WT2")
+
+cs <- np_monitoring_master %>% 
+  filter(Plot == "CS")
+
+```
+
