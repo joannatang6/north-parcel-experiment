@@ -1,0 +1,78 @@
+﻿Species,Species_Full_Name,Native_Status
+ALSA,Alopecurus saccatus,N
+ALTR,Alisma triviale,N
+ANNU,Antirrhinum nuttallianum,E
+ASFA,Asclepias fascicularis ,N
+BOMA,Bolboschoenus maritimus,N
+BRACHDI,Brachypodium distachyon,E
+BRDI,Bromus diandrus,E
+BRHO,Bromus hordeaceus ,E
+BRMA,Bromus madritensis,E
+BRNI,Brassica nigra,E
+CAPR,Carex praegracilis,N
+CAPY,Carduus pycnocephalus,E
+CEPA,Centromadia parryi ssp. australis ,N
+CRSC,Crypsis schoenoides,E
+CRSE,Croton setigerus,N
+CYER,Cyperus eragrostis,N
+DEFA,Deinandra fasciculata,N
+DIMI,dichondra micrantha,E
+DISP,Distichlis spicata,N
+ELGL,Elymus glaucus,N
+ELMA,ELeocharis machrostachya,N
+EPBR,Epilobium brachycarphum,N
+ERCA,Erigeron Canadensis,N
+ERCI,Erodium cicutarium,E
+ERVA,Eryngium vaseyi,N
+ESCA,Eschscholzia californica,N
+EUSE,Euphorbia serpens,E
+EXCA,Extriplex californica,N
+FEMY,Festuca myuros ,E
+FEPE,Festuca perennis,E
+FRSA,Frankenia salina,N
+GEDI,Geranium dissectum  ,E
+HEEC,Helminthotheca echiodes,E
+HEGR,Heterotheca grandifolia,N
+HOBR,Hordeum brachyantherum,N
+HOBRBR,Hordeum brachyantherum brachyantherum,N
+HYGL,Hypochaeris glabra,E
+HYRA,Hypochaeris radicata,E
+JUBU,Juncus bufonius,N
+JUME,Juncus mexicanus,N
+JUOC,Juncus occidentalis,N
+JUPA,Juncus patens,N
+JUPH,Juncus phaeocephalus ,N
+LACO,Laennecia coulteri,N
+LASE,Lactuca serriola,E
+LUSU,Lupinus succulentus ,N
+LYHY,Lythrum hyssopifolia,E
+MALE,Malvella leprosa,N
+MAPA,Malva parviflora,E
+MEIN,Melilotus indicus,E
+MELU,Medicago lupulina,E
+MEPO,Medicago polymorpha,E
+OXCA,Oxalis californica,N
+PAIN,Paraphalis incurva ,E
+PHLE,Phalaris lemmonii,N
+POAVDE,Polyganum aviculare ssp.depressum ,E
+POIN,Polypogon interruptus,E
+POMO,Polypogon monospeliensis,E
+PSBR,Psilocarphus brevissimus,N
+PSLUAL,Pseudognaphalium luteo-album ,E
+RUCR,Rumex crispus,E
+RUSA,Rumex salicifolius,N
+SEVU,Senecio vulgaris,E
+SIBE,Sisyrinchium bellum,N
+SOOL,Sonchus oleraceus ,E
+Species Code,Genus Species,Native Status
+SPSP,Spergularia species,E
+STPU,Stipe pulchra,N
+SYSU,Symphyotrichum subulatum,N
+TRHI,Trifolium hirtum,E
+UNKGRASS,Unknown exotic grass,E
+VELA,Verbena lasiostachys,N
+VISA,Vicia sativa,E
+VIVI,Vicia villosa,E
+ZEMU,Zeltnera muehlenbergii,N
+VISP,Vicia species,E
+LOGA,Logfia gallica,E

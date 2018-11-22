@@ -9,36 +9,169 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
 
-# Loading packages, read in np_2016_seedbank.csv data
+```{r include = FALSE}
+
+# Loading packages, read in data
 library(tidyverse)
 library(janitor)
 np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
+metadata <- read_csv("metadata.csv")
+
+```
 
 
-# Make separate dataframes for each site
-ph1_seedbank_master <- np_2016_seedbank_master %>% 
-  filter(Plot == "PH1")
-ph1 <- ph1[, colSums(ph1 !=0) >0]
+```{r echo = FALSE, message = FALSE, warning = FALSE}
 
-ms <- np_2016_seedbank_master %>% 
-  filter(Plot == "MS")
+# Convert np_2016_seedbank into tidy format, remove NAs, separate "Replicate" label into Replicate_Zone and Replicate_Number
+seedbank_2016 <- gather(np_2016_seedbank_master, key = "Species", value = "Count", -c(Plot, Replicate)) %>% 
+  na.omit(np_2016_seedbank_master) %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3"))
 
-rt <- np_2016_seedbank_master %>% 
-  filter(Plot == "RT")
 
-tp <- np_2016_seedbank_master %>% 
-  filter(Plot == "TP")
+# Make separate dataframes for each site, with % column and species metadata
+ph1 <- filter(seedbank_2016, Plot == "PH1") %>% 
+  mutate(Percent = 100*Count/sum(Count))
+ph1_2016_seedbank <- full_join(ph1, metadata)
 
-wt1 <- np_2016_seedbank_master %>% 
-  filter(Plot == "WT1")
+ms <- filter(seedbank_2016, Plot == "MS") %>% 
+  mutate(Percent = 100*Count/sum(Count))
+ms_2016_seedbank <- full_join(ph1_2016_seedbank, metadata)
 
-wt2 <- np_monitoring_master %>% 
-  filter(Plot == "WT2")
+rt <- filter(seedbank_2016, Plot == "RT") %>% 
+  mutate(Percent = 100*Count/sum(Count))
+rt_2016_seedbank <- full_join(rt, metadata)
 
-cs <- np_monitoring_master %>% 
-  filter(Plot == "CS")
+tp <- filter(seedbank_2016, Plot == "TP") %>% 
+  mutate(Percent = 100*Count/sum(Count))
+tp_2016_seedbank <- full_join(tp, metadata)
+
+wt1 <- filter(seedbank_2016, Plot == "WT1") %>% 
+  mutate(Percent = 100*Count/sum(Count))
+wt1_2016_seedbank <- full_join(wt1, metadata)
+
+wt2 <- filter(seedbank_2016, Plot == "WT2") %>% 
+  mutate(Percent = 100*Count/sum(Count))
+wt2_2016_seedbank <- full_join(wt2, metadata)
+
+cs <- filter(seedbank_2016, Plot == "CS") %>% 
+  mutate(Percent = 100*Count/sum(Count))
+cs_2016_seedbank <- full_join(cs, metadata)
+
+```
+
+# Phase 1
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# Aggregate PH1 data
+ph1_2016_seedbank_summary <- ph1_2016_seedbank %>% 
+  na.omit(ph1_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    )
+
+# Aggregate percentages
+ph1_col <- ggplot(ph1_2016_seedbank_summary, aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Aggregate percentages", y = "Mean Percentage")
+ph1_col
+
+# Central zone percentages
+ph1_c_col <- filter(ph1_2016_seedbank, Replicate_Zone == "C") %>% 
+  na.omit(ph1_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Central Zone", y = "Mean Percentage")
+ph1_c_col
+
+# Transition zone percentages
+ph1_t_col <- filter(ph1_2016_seedbank, Replicate_Zone == "T") %>% 
+  na.omit(ph1_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition Zone", y = "Mean Percentage")
+ph1_t_col
+
+# Upland zone percentages
+ph1_u_col <- filter(ph1_2016_seedbank, Replicate_Zone == "U") %>% 
+  na.omit(ph1_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Upland Zone", y = "Mean Percentage")
+ph1_u_col
+
+```
+
+# Mini South
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+```
+
+# Redtail
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+```
+
+# Tadpole
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+```
+
+# Whitetail 1
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+```
+
+# Whitetail 2
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+```
+
+# Creekside
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+```
+
+# Aggregate
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+seedbank_2016_summary <- seedbank_2016 %>% 
+  na.omit(seedbank_2016) %>%
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count)
+    )
+
+# Aggregate counts
+np_col <- ggplot(seedbank_2016_summary, aes(x = Species, y = total)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Aggregate counts", x = "Total Counts", y = "Mean Percentage")
+np_col
 
 ```
 
