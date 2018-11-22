@@ -15,6 +15,8 @@ knitr::opts_chunk$set(echo = TRUE)
 # Loading packages, read in data
 library(tidyverse)
 library(janitor)
+library(knitr)
+library(kableExtra)
 np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
 metadata <- read_csv("metadata.csv")
 
@@ -58,6 +60,7 @@ wt2_2016_seedbank <- full_join(wt2, metadata)
 cs <- filter(seedbank_2016, Plot == "CS") %>% 
   mutate(Percent = 100*Count/sum(Count))
 cs_2016_seedbank <- full_join(cs, metadata)
+
 
 ```
 
@@ -123,36 +126,405 @@ ph1_u_col <- filter(ph1_2016_seedbank, Replicate_Zone == "U") %>%
   labs(title = "Upland Zone", y = "Mean Percentage")
 ph1_u_col
 
+
+# Native vs. exotic
+ph1_native <- ph1_2016_seedbank %>% 
+  mutate(native = case_when(Native_Status == "N" ~ 1)) %>% 
+  mutate(exotic = case_when(Native_Status == "E" ~ 1)) %>% 
+  filter(native != "NA") %>% 
+  summarize(
+    native = sum(native)
+  )
+
+ph1_exotic <- ph1_2016_seedbank %>% 
+  mutate(native = case_when(Native_Status == "N" ~ 1)) %>% 
+  mutate(exotic = case_when(Native_Status == "E" ~ 1)) %>% 
+  filter(exotic != "NA") %>% 
+  summarize(
+    exotic = sum(exotic)
+  )
+
+# % native = 54.35
+# % exotic = 45.65
+
 ```
 
 # Mini South
 
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
 
+# Aggregate MS data
+ms_2016_seedbank_summary <- ms_2016_seedbank %>% 
+  na.omit(ms_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    )
+
+# Aggregate percentages
+ms_col <- ggplot(ms_2016_seedbank_summary, aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Aggregate percentages", y = "Mean Percentage")
+ms_col
+
+# Central zone percentages
+ms_c_col <- filter(ms_2016_seedbank, Replicate_Zone == "C") %>% 
+  na.omit(ms_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Central Zone", y = "Mean Percentage")
+ms_c_col
+
+# Transition zone percentages
+ms_t_col <- filter(ms_2016_seedbank, Replicate_Zone == "T") %>% 
+  na.omit(ms_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition Zone", y = "Mean Percentage")
+ms_t_col
+
+# Upland zone percentages
+ms_u_col <- filter(ms_2016_seedbank, Replicate_Zone == "U") %>% 
+  na.omit(ms_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Upland Zone", y = "Mean Percentage")
+ms_u_col
+
 ```
 
 # Redtail
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# Aggregate RT data
+rt_2016_seedbank_summary <- rt_2016_seedbank %>% 
+  na.omit(rt_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    )
+
+# Aggregate percentages
+rt_col <- ggplot(rt_2016_seedbank_summary, aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Aggregate percentages", y = "Mean Percentage")
+rt_col
+
+# Central zone percentages
+rt_c_col <- filter(rt_2016_seedbank, Replicate_Zone == "C") %>% 
+  na.omit(rt_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Central Zone", y = "Mean Percentage")
+rt_c_col
+
+# Transition zone percentages
+rt_t_col <- filter(rt_2016_seedbank, Replicate_Zone == "T") %>% 
+  na.omit(rt_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition Zone", y = "Mean Percentage")
+rt_t_col
+
+# Upland zone percentages
+rt_u_col <- filter(rt_2016_seedbank, Replicate_Zone == "U") %>% 
+  na.omit(rt_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Upland Zone", y = "Mean Percentage")
+rt_u_col
 
 ```
 
 # Tadpole
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
 
+# Aggregate TP data
+tp_2016_seedbank_summary <- tp_2016_seedbank %>% 
+  na.omit(tp_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    )
+
+# Aggregate percentages
+tp_col <- ggplot(tp_2016_seedbank_summary, aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Aggregate percentages", y = "Mean Percentage")
+tp_col
+
+# Central zone percentages
+tp_c_col <- filter(tp_2016_seedbank, Replicate_Zone == "C") %>% 
+  na.omit(rt_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Central Zone", y = "Mean Percentage")
+tp_c_col
+
+# Transition zone percentages
+tp_t_col <- filter(tp_2016_seedbank, Replicate_Zone == "T") %>% 
+  na.omit(tp_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition Zone", y = "Mean Percentage")
+tp_t_col
+
+# Upland zone percentages
+tp_u_col <- filter(tp_2016_seedbank, Replicate_Zone == "U") %>% 
+  na.omit(tp_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Upland Zone", y = "Mean Percentage")
+tp_u_col
+
 ```
 
 # Whitetail 1
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# Aggregate WT1 data
+wt1_2016_seedbank_summary <- wt1_2016_seedbank %>% 
+  na.omit(rt_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    )
+
+# Aggregate percentages
+wt1_col <- ggplot(wt1_2016_seedbank_summary, aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Aggregate percentages", y = "Mean Percentage")
+wt1_col
+
+# Central zone percentages
+wt1_c_col <- filter(wt1_2016_seedbank, Replicate_Zone == "C") %>% 
+  na.omit(wt1_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Central Zone", y = "Mean Percentage")
+wt1_c_col
+
+# Transition zone percentages
+wt1_t_col <- filter(wt1_2016_seedbank, Replicate_Zone == "T") %>% 
+  na.omit(wt1_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition Zone", y = "Mean Percentage")
+wt1_t_col
+
+# Upland zone percentages
+wt1_u_col <- filter(wt1_2016_seedbank, Replicate_Zone == "U") %>% 
+  na.omit(wt1_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Upland Zone", y = "Mean Percentage")
+wt1_u_col
 
 ```
 
 # Whitetail 2
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
 
+# Aggregate WT2 data
+wt2_2016_seedbank_summary <- wt2_2016_seedbank %>% 
+  na.omit(wt2_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    )
+
+# Aggregate percentages
+wt2_col <- ggplot(wt2_2016_seedbank_summary, aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Aggregate percentages", y = "Mean Percentage")
+wt2_col
+
+# Central zone percentages
+wt2_c_col <- filter(wt2_2016_seedbank, Replicate_Zone == "C") %>% 
+  na.omit(wt2_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Central Zone", y = "Mean Percentage")
+wt2_c_col
+
+# Transition zone percentages
+wt2_t_col <- filter(wt2_2016_seedbank, Replicate_Zone == "T") %>% 
+  na.omit(wt2_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition Zone", y = "Mean Percentage")
+wt2_t_col
+
+# Upland zone percentages
+wt2_u_col <- filter(wt2_2016_seedbank, Replicate_Zone == "U") %>% 
+  na.omit(wt2_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Upland Zone", y = "Mean Percentage")
+wt2_u_col
+
 ```
 
 # Creekside
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# Aggregate CS data
+cs_2016_seedbank_summary <- cs_2016_seedbank %>% 
+  na.omit(cs_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    )
+
+# Aggregate percentages
+cs_col <- ggplot(cs_2016_seedbank_summary, aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Aggregate percentages", y = "Mean Percentage")
+cs_col
+
+# Central zone percentages
+cs_c_col <- filter(cs_2016_seedbank, Replicate_Zone == "C") %>% 
+  na.omit(cs_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Central Zone", y = "Mean Percentage")
+cs_c_col
+
+# Transition zone percentages
+cs_t_col <- filter(cs_2016_seedbank, Replicate_Zone == "T") %>% 
+  na.omit(cs_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition Zone", y = "Mean Percentage")
+cs_t_col
+
+# Upland zone percentages
+cs_u_col <- filter(cs_2016_seedbank, Replicate_Zone == "U") %>% 
+  na.omit(cs_2016_seedbank) %>% 
+  group_by(Species) %>% 
+  summarize(
+    total = sum(Count),
+    mean_percentage = mean(Percent)
+    ) %>% 
+  ggplot(aes(x = Species, y = mean_percentage)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Upland Zone", y = "Mean Percentage")
+cs_u_col
 
 ```
 
@@ -172,6 +544,13 @@ np_col <- ggplot(seedbank_2016_summary, aes(x = Species, y = total)) +
   theme(axis.text.x = element_text(angle = 90)) +
   labs(title = "Aggregate counts", x = "Total Counts", y = "Mean Percentage")
 np_col
+
+# Aggregate counts <20
+np_col_under_20 <- ggplot(filter(seedbank_2016_summary, total <20), aes(x = Species, y = total)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Aggregate counts <20", x = "Total Counts", y = "Mean Percentage")
+np_col_under_20
 
 ```
 
