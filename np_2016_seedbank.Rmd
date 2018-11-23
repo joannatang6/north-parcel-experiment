@@ -128,24 +128,10 @@ ph1_u_col
 
 
 # Native vs. exotic
-ph1_native <- ph1_2016_seedbank %>% 
-  mutate(native = case_when(Native_Status == "N" ~ 1)) %>% 
-  mutate(exotic = case_when(Native_Status == "E" ~ 1)) %>% 
-  filter(native != "NA") %>% 
-  summarize(
-    native = sum(native)
-  )
-
-ph1_exotic <- ph1_2016_seedbank %>% 
-  mutate(native = case_when(Native_Status == "N" ~ 1)) %>% 
-  mutate(exotic = case_when(Native_Status == "E" ~ 1)) %>% 
-  filter(exotic != "NA") %>% 
-  summarize(
-    exotic = sum(exotic)
-  )
-
-# % native = 54.35
-# % exotic = 45.65
+ph1_native <- ggplot(filter(ph1_2016_seedbank, Native_Status == "N" | Native_Status == "E"), aes(x = Native_Status)) +
+  geom_bar() +
+  labs(title = "Native vs. exotic", x = "Native Status", y = "Frequency")
+ph1_native
 
 ```
 
@@ -211,6 +197,13 @@ ms_u_col <- filter(ms_2016_seedbank, Replicate_Zone == "U") %>%
   labs(title = "Upland Zone", y = "Mean Percentage")
 ms_u_col
 
+
+# Native vs. exotic
+ms_native <- ggplot(filter(ms_2016_seedbank, Native_Status == "N" | Native_Status == "E"), aes(x = Native_Status)) +
+  geom_bar() +
+  labs(title = "Native vs. exotic", x = "Native Status", y = "Frequency")
+ms_native
+
 ```
 
 # Redtail
@@ -273,6 +266,13 @@ rt_u_col <- filter(rt_2016_seedbank, Replicate_Zone == "U") %>%
   theme(axis.text.x = element_text(angle = 90)) +
   labs(title = "Upland Zone", y = "Mean Percentage")
 rt_u_col
+
+
+# Native vs. exotic
+rt_native <- ggplot(filter(rt_2016_seedbank, Native_Status == "N" | Native_Status == "E"), aes(x = Native_Status)) +
+  geom_bar() +
+  labs(title = "Native vs. exotic", x = "Native Status", y = "Frequency")
+rt_native
 
 ```
 
@@ -337,6 +337,14 @@ tp_u_col <- filter(tp_2016_seedbank, Replicate_Zone == "U") %>%
   labs(title = "Upland Zone", y = "Mean Percentage")
 tp_u_col
 
+
+
+# Native vs. exotic
+tp_native <- ggplot(filter(tp_2016_seedbank, Native_Status == "N" | Native_Status == "E"), aes(x = Native_Status)) +
+  geom_bar() +
+  labs(title = "Native vs. exotic", x = "Native Status", y = "Frequency")
+tp_native
+
 ```
 
 # Whitetail 1
@@ -399,6 +407,14 @@ wt1_u_col <- filter(wt1_2016_seedbank, Replicate_Zone == "U") %>%
   theme(axis.text.x = element_text(angle = 90)) +
   labs(title = "Upland Zone", y = "Mean Percentage")
 wt1_u_col
+
+
+
+# Native vs. exotic
+wt1_native <- ggplot(filter(wt1_2016_seedbank, Native_Status == "N" | Native_Status == "E"), aes(x = Native_Status)) +
+  geom_bar() +
+  labs(title = "Native vs. exotic", x = "Native Status", y = "Frequency")
+wt1_native
 
 ```
 
@@ -463,6 +479,14 @@ wt2_u_col <- filter(wt2_2016_seedbank, Replicate_Zone == "U") %>%
   labs(title = "Upland Zone", y = "Mean Percentage")
 wt2_u_col
 
+
+
+# Native vs. exotic
+wt2_native <- ggplot(filter(wt2_2016_seedbank, Native_Status == "N" | Native_Status == "E"), aes(x = Native_Status)) +
+  geom_bar() +
+  labs(title = "Native vs. exotic", x = "Native Status", y = "Frequency")
+wt2_native
+
 ```
 
 # Creekside
@@ -526,6 +550,14 @@ cs_u_col <- filter(cs_2016_seedbank, Replicate_Zone == "U") %>%
   labs(title = "Upland Zone", y = "Mean Percentage")
 cs_u_col
 
+
+
+# Native vs. exotic
+cs_native <- ggplot(filter(cs_2016_seedbank, Native_Status == "N" | Native_Status == "E"), aes(x = Native_Status)) +
+  geom_bar() +
+  labs(title = "Native vs. exotic", x = "Native Status", y = "Frequency")
+cs_native
+
 ```
 
 # Aggregate
@@ -551,6 +583,16 @@ np_col_under_20 <- ggplot(filter(seedbank_2016_summary, total <20), aes(x = Spec
   theme(axis.text.x = element_text(angle = 90)) +
   labs(title = "Aggregate counts <20", x = "Total Counts", y = "Mean Percentage")
 np_col_under_20
+
+
+
+
+# Native vs. exotic
+np_native <- full_join(seedbank_2016, metadata)
+np_native <- ggplot(filter(np_native, Native_Status == "N" | Native_Status == "E"), aes(x = Native_Status)) +
+  geom_bar() +
+  labs(title = "Native vs. exotic", x = "Native Status", y = "Frequency")
+np_native
 
 ```
 

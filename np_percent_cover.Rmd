@@ -1,0 +1,180 @@
+---
+title: "np_percent_cover"
+author: "Joanna Tang"
+date: "11/22/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include = FALSE}
+# Loading packages, read in data
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
+np_percent_cover <- read_csv("np_percent_cover.csv")
+metadata <- read_csv("metadata.csv")
+
+```
+
+```{r include = FALSE}
+
+# Separate "Replicate" label into Replicate_Zone and Replicate_Number, join with species metadata, convert month and year to "date" column
+percent_cover <- np_percent_cover %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3"))
+percent_cover <- full_join(percent_cover, metadata) %>% 
+  mutate(month_number = case_when(Month == "JANUARY" ~ 1, Month == "FEBRUARY" ~ 2, Month == "MARCH" ~ 3, Month == "APRIL" ~ 4, Month == "MAY" ~ 5, Month == "JUNE" ~ 6, Month == "JULY" ~ 7, Month == "AUGUST" ~ 8, Month == "SEPTEMBER" ~ 9, Month == "OCTOBER" ~ 10, Month == "NOVEMBER" ~ 11, Month == "DECEMBER" ~ 12)) %>% 
+  mutate(date = paste(month_number, Year, sep="-" ))
+
+
+# Make separate dataframes for each site
+
+ph1_percent_cover <- filter(percent_cover, Plot == "PH1")
+
+ms_percent_cover <- filter(percent_cover, Plot == "MS")
+
+rt_percent_cover <- filter(percent_cover, Plot == "RT")
+
+tp_percent_cover <- filter(percent_cover, Plot == "TP")
+
+wt1_percent_cover <- filter(percent_cover, Plot == "WT1")
+
+wt2_percent_cover <- filter(percent_cover, Plot == "WT2")
+
+cs_percent_cover <- filter(percent_cover, Plot == "CS")
+
+
+```
+
+# Phase 1
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# Aggregate PH1 data
+ph1_percent_cover_summary <- ph1_percent_cover %>% 
+  group_by(Species, date, Native_Status, Replicate_Zone) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    )
+
+# Aggregate percentages
+ph1_line <- ggplot(ph1_percent_cover_summary, aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+ph1_line
+
+# Central zone percentages
+ph1_c_line <- filter(ph1_percent_cover, Replicate_Zone == "C") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+ph1_c_line
+
+# Transition zone percentages
+ph1_t_line <- filter(ph1_percent_cover, Replicate_Zone == "T") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+ph1_t_line
+
+# Upland zone percentages
+ph1_u_line <- filter(ph1_percent_cover, Replicate_Zone == "U") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+ph1_u_line
+
+# Native vs. exotic
+ph1_native <- ph1_percent_cover_summary %>% 
+  group_by(Native_Status, date, Replicate_Zone) %>% 
+  summarize(
+    total = sum(mean_percentage)
+  ) %>% 
+  na.omit()
+
+# Aggregate
+ph1_native_line <- ggplot(ph1_native, aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+ph1_native_line
+
+# Central zone
+ph1_c_native_line <- ggplot(filter(ph1_native, Replicate_Zone == "C"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Central Zone", x = "Date", y = "Mean Percent Cover")
+ph1_c_native_line
+
+# Transition zone
+ph1_t_native_line <- ggplot(filter(ph1_native, Replicate_Zone == "T"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+ph1_t_native_line
+
+# Upland zone
+ph1_u_native_line <- ggplot(filter(ph1_native, Replicate_Zone == "U"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Upland Zone", x = "Date", y = "Mean Percent Cover")
+ph1_u_native_line
+
+```
+
+# Mini South
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+```
+
+# Redtail
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+```
+
+# Tadpole
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+```
+
+# Whitetail 1
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+```
+
+# Whitetail 2
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+```
+
+# Creekside
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+```
+

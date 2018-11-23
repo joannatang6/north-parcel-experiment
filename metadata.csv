@@ -64,7 +64,6 @@ RUSA,Rumex salicifolius,N
 SEVU,Senecio vulgaris,E
 SIBE,Sisyrinchium bellum,N
 SOOL,Sonchus oleraceus ,E
-Species Code,Genus Species,Native Status
 SPSP,Spergularia species,E
 STPU,Stipe pulchra,N
 SYSU,Symphyotrichum subulatum,N
@@ -76,3 +75,5 @@ VIVI,Vicia villosa,E
 ZEMU,Zeltnera muehlenbergii,N
 VISP,Vicia species,E
 LOGA,Logfia gallica,E
+BARE,bare ground,
+THATCH,thatch,
