@@ -77,7 +77,7 @@ ph1_c_line <- filter(ph1_percent_cover, Replicate_Zone == "C") %>%
   ggplot(aes(x = date, y = mean_percentage)) +
   geom_line(aes(color = Species, group = Species)) +
   theme(axis.text.x = element_text(angle = 90)) +
-  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+  labs(title = "Percent Cover in Central Zone", x = "Date", y = "Mean Percent Cover")
 ph1_c_line
 
 # Transition zone percentages
@@ -89,7 +89,7 @@ ph1_t_line <- filter(ph1_percent_cover, Replicate_Zone == "T") %>%
   ggplot(aes(x = date, y = mean_percentage)) +
   geom_line(aes(color = Species, group = Species)) +
   theme(axis.text.x = element_text(angle = 90)) +
-  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
 ph1_t_line
 
 # Upland zone percentages
@@ -101,8 +101,45 @@ ph1_u_line <- filter(ph1_percent_cover, Replicate_Zone == "U") %>%
   ggplot(aes(x = date, y = mean_percentage)) +
   geom_line(aes(color = Species, group = Species)) +
   theme(axis.text.x = element_text(angle = 90)) +
-  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
 ph1_u_line
+
+
+# Aggregate percentages of 12 indicative species
+ph1_12_line <- filter(ph1_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species", x = "Date", y = "Mean Percent Cover")
+ph1_12_line
+
+# Central zone percentages of 12 indicative species
+ph1_c_12_line <- filter(ph1_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "C") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Central Zone", x = "Date", y = "Mean Percent Cover")
+ph1_c_12_line
+
+# Transition zone percentages of 12 indicative species
+ph1_t_12_line <- filter(ph1_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "T") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Transition Zone", x = "Date", y = "Mean Percent Cover")
+ph1_t_12_line
+
+# Upland zone percentages of 12 indicative species
+ph1_u_12_line <- filter(ph1_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "U") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Upland Zone", x = "Date", y = "Mean Percent Cover")
+ph1_u_12_line
+
 
 # Native vs. exotic
 ph1_native <- ph1_percent_cover_summary %>% 
@@ -146,11 +183,257 @@ ph1_u_native_line
 
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
 
+# Aggregate MS data
+ms_percent_cover_summary <- ms_percent_cover %>% 
+  group_by(Species, date, Native_Status, Replicate_Zone) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    )
+
+# Aggregate percentages
+ms_line <- ggplot(ms_percent_cover_summary, aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+ms_line
+
+# Central zone percentages
+ms_c_line <- filter(ms_percent_cover, Replicate_Zone == "C") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Central Zone", x = "Date", y = "Mean Percent Cover")
+ms_c_line
+
+# Transition zone percentages
+ms_t_line <- filter(ms_percent_cover, Replicate_Zone == "T") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+ms_t_line
+
+# Upland zone percentages
+ms_u_line <- filter(ms_percent_cover, Replicate_Zone == "U") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+ms_u_line
+
+
+# Aggregate percentages of 12 indicative species
+ms_12_line <- filter(ms_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species", x = "Date", y = "Mean Percent Cover")
+ms_12_line
+
+# Central zone percentages of 12 indicative species
+ms_c_12_line <- filter(ms_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "C") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Central Zone", x = "Date", y = "Mean Percent Cover")
+ms_c_12_line
+
+# Transition zone percentages of 12 indicative species
+ms_t_12_line <- filter(ms_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "T") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Transition Zone", x = "Date", y = "Mean Percent Cover")
+ms_t_12_line
+
+# Upland zone percentages of 12 indicative species
+ms_u_12_line <- filter(ms_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "U") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Upland Zone", x = "Date", y = "Mean Percent Cover")
+ms_u_12_line
+
+
+# Native vs. exotic
+ms_native <- ms_percent_cover_summary %>% 
+  group_by(Native_Status, date, Replicate_Zone) %>% 
+  summarize(
+    total = sum(mean_percentage)
+  ) %>% 
+  na.omit()
+
+# Aggregate
+ms_native_line <- ggplot(ms_native, aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+ms_native_line
+
+# Central zone
+ms_c_native_line <- ggplot(filter(ms_native, Replicate_Zone == "C"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Central Zone", x = "Date", y = "Mean Percent Cover")
+ms_c_native_line
+
+# Transition zone
+ms_t_native_line <- ggplot(filter(ms_native, Replicate_Zone == "T"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+ms_t_native_line
+
+# Upland zone
+ms_u_native_line <- ggplot(filter(ms_native, Replicate_Zone == "U"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Upland Zone", x = "Date", y = "Mean Percent Cover")
+ms_u_native_line
+
 ```
 
 # Redtail
 
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# Aggregate RT data
+rt_percent_cover_summary <- rt_percent_cover %>% 
+  group_by(Species, date, Native_Status, Replicate_Zone) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    )
+
+# Aggregate percentages
+rt_line <- ggplot(rt_percent_cover_summary, aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+rt_line
+
+# Central zone percentages
+rt_c_line <- filter(rt_percent_cover, Replicate_Zone == "C") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Central Zone", x = "Date", y = "Mean Percent Cover")
+rt_c_line
+
+# Transition zone percentages
+rt_t_line <- filter(rt_percent_cover, Replicate_Zone == "T") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+rt_t_line
+
+# Upland zone percentages
+rt_u_line <- filter(rt_percent_cover, Replicate_Zone == "U") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+rt_u_line
+
+
+# Aggregate percentages of 12 indicative species
+rt_12_line <- filter(rt_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species", x = "Date", y = "Mean Percent Cover")
+rt_12_line
+
+# Central zone percentages of 12 indicative species
+rt_c_12_line <- filter(rt_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "C") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Central Zone", x = "Date", y = "Mean Percent Cover")
+rt_c_12_line
+
+# Transition zone percentages of 12 indicative species
+rt_t_12_line <- filter(rt_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "T") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Transition Zone", x = "Date", y = "Mean Percent Cover")
+rt_t_12_line
+
+# Upland zone percentages of 12 indicative species
+rt_u_12_line <- filter(rt_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "U") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Upland Zone", x = "Date", y = "Mean Percent Cover")
+rt_u_12_line
+
+
+# Native vs. exotic
+rt_native <- rt_percent_cover_summary %>% 
+  group_by(Native_Status, date, Replicate_Zone) %>% 
+  summarize(
+    total = sum(mean_percentage)
+  ) %>% 
+  na.omit()
+
+# Aggregate
+rt_native_line <- ggplot(rt_native, aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+rt_native_line
+
+# Central zone
+rt_c_native_line <- ggplot(filter(rt_native, Replicate_Zone == "C"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Central Zone", x = "Date", y = "Mean Percent Cover")
+rt_c_native_line
+
+# Transition zone
+rt_t_native_line <- ggplot(filter(rt_native, Replicate_Zone == "T"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+rt_t_native_line
+
+# Upland zone
+rt_u_native_line <- ggplot(filter(rt_native, Replicate_Zone == "U"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Upland Zone", x = "Date", y = "Mean Percent Cover")
+rt_u_native_line
 
 ```
 
@@ -158,11 +441,257 @@ ph1_u_native_line
 
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
 
+ # Aggregate TP data
+tp_percent_cover_summary <- tp_percent_cover %>% 
+  group_by(Species, date, Native_Status, Replicate_Zone) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    )
+
+# Aggregate percentages
+tp_line <- ggplot(tp_percent_cover_summary, aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+tp_line
+
+# Central zone percentages
+tp_c_line <- filter(tp_percent_cover, Replicate_Zone == "C") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Central Zone", x = "Date", y = "Mean Percent Cover")
+tp_c_line
+
+# Transition zone percentages
+tp_t_line <- filter(tp_percent_cover, Replicate_Zone == "T") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+tp_t_line
+
+# Upland zone percentages
+tp_u_line <- filter(tp_percent_cover, Replicate_Zone == "U") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+tp_u_line
+
+
+# Aggregate percentages of 12 indicative species
+tp_12_line <- filter(tp_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species", x = "Date", y = "Mean Percent Cover")
+tp_12_line
+
+# Central zone percentages of 12 indicative species
+tp_c_12_line <- filter(tp_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "C") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Central Zone", x = "Date", y = "Mean Percent Cover")
+tp_c_12_line
+
+# Transition zone percentages of 12 indicative species
+tp_t_12_line <- filter(tp_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "T") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Transition Zone", x = "Date", y = "Mean Percent Cover")
+tp_t_12_line
+
+# Upland zone percentages of 12 indicative species
+tp_u_12_line <- filter(tp_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "U") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Upland Zone", x = "Date", y = "Mean Percent Cover")
+tp_u_12_line
+
+
+# Native vs. exotic
+tp_native <- tp_percent_cover_summary %>% 
+  group_by(Native_Status, date, Replicate_Zone) %>% 
+  summarize(
+    total = sum(mean_percentage)
+  ) %>% 
+  na.omit()
+
+# Aggregate
+tp_native_line <- ggplot(tp_native, aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+tp_native_line
+
+# Central zone
+tp_c_native_line <- ggplot(filter(tp_native, Replicate_Zone == "C"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Central Zone", x = "Date", y = "Mean Percent Cover")
+tp_c_native_line
+
+# Transition zone
+tp_t_native_line <- ggplot(filter(tp_native, Replicate_Zone == "T"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+tp_t_native_line
+
+# Upland zone
+tp_u_native_line <- ggplot(filter(tp_native, Replicate_Zone == "U"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Upland Zone", x = "Date", y = "Mean Percent Cover")
+tp_u_native_line
+
 ```
 
 # Whitetail 1
 
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# Aggregate WT1 data
+wt1_percent_cover_summary <- wt1_percent_cover %>% 
+  group_by(Species, date, Native_Status, Replicate_Zone) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    )
+
+# Aggregate percentages
+wt1_line <- ggplot(wt1_percent_cover_summary, aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+wt1_line
+
+# Central zone percentages
+wt1_c_line <- filter(wt1_percent_cover, Replicate_Zone == "C") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Central Zone", x = "Date", y = "Mean Percent Cover")
+wt1_c_line
+
+# Transition zone percentages
+wt1_t_line <- filter(wt1_percent_cover, Replicate_Zone == "T") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+wt1_t_line
+
+# Upland zone percentages
+wt1_u_line <- filter(wt1_percent_cover, Replicate_Zone == "U") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+wt1_u_line
+
+
+# Aggregate percentages of 12 indicative species
+wt1_12_line <- filter(wt1_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species", x = "Date", y = "Mean Percent Cover")
+wt1_12_line
+
+# Central zone percentages of 12 indicative species
+wt1_c_12_line <- filter(wt1_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "C") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Central Zone", x = "Date", y = "Mean Percent Cover")
+wt1_c_12_line
+
+# Transition zone percentages of 12 indicative species
+wt1_t_12_line <- filter(wt1_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "T") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Transition Zone", x = "Date", y = "Mean Percent Cover")
+wt1_t_12_line
+
+# Upland zone percentages of 12 indicative species
+wt1_u_12_line <- filter(wt1_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "U") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Upland Zone", x = "Date", y = "Mean Percent Cover")
+wt1_u_12_line
+
+
+# Native vs. exotic
+wt1_native <- wt1_percent_cover_summary %>% 
+  group_by(Native_Status, date, Replicate_Zone) %>% 
+  summarize(
+    total = sum(mean_percentage)
+  ) %>% 
+  na.omit()
+
+# Aggregate
+wt1_native_line <- ggplot(wt1_native, aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+wt1_native_line
+
+# Central zone
+wt1_c_native_line <- ggplot(filter(wt1_native, Replicate_Zone == "C"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Central Zone", x = "Date", y = "Mean Percent Cover")
+wt1_c_native_line
+
+# Transition zone
+wt1_t_native_line <- ggplot(filter(wt1_native, Replicate_Zone == "T"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+wt1_t_native_line
+
+# Upland zone
+wt1_u_native_line <- ggplot(filter(wt1_native, Replicate_Zone == "U"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Upland Zone", x = "Date", y = "Mean Percent Cover")
+wt1_u_native_line
 
 ```
 
@@ -170,11 +699,257 @@ ph1_u_native_line
 
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
 
+# Aggregate WT2 data
+wt2_percent_cover_summary <- wt2_percent_cover %>% 
+  group_by(Species, date, Native_Status, Replicate_Zone) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    )
+
+# Aggregate percentages
+wt2_line <- ggplot(wt2_percent_cover_summary, aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+wt2_line
+
+# Central zone percentages
+wt2_c_line <- filter(wt2_percent_cover, Replicate_Zone == "C") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Central Zone", x = "Date", y = "Mean Percent Cover")
+wt2_c_line
+
+# Transition zone percentages
+wt2_t_line <- filter(wt2_percent_cover, Replicate_Zone == "T") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+wt2_t_line
+
+# Upland zone percentages
+wt2_u_line <- filter(wt2_percent_cover, Replicate_Zone == "U") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+wt2_u_line
+
+
+# Aggregate percentages of 12 indicative species
+wt2_12_line <- filter(wt2_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species", x = "Date", y = "Mean Percent Cover")
+wt2_12_line
+
+# Central zone percentages of 12 indicative species
+wt2_c_12_line <- filter(wt2_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "C") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Central Zone", x = "Date", y = "Mean Percent Cover")
+wt2_c_12_line
+
+# Transition zone percentages of 12 indicative species
+wt2_t_12_line <- filter(wt2_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "T") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Transition Zone", x = "Date", y = "Mean Percent Cover")
+wt2_t_12_line
+
+# Upland zone percentages of 12 indicative species
+wt2_u_12_line <- filter(wt2_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "U") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Upland Zone", x = "Date", y = "Mean Percent Cover")
+wt2_u_12_line
+
+
+# Native vs. exotic
+wt2_native <- wt2_percent_cover_summary %>% 
+  group_by(Native_Status, date, Replicate_Zone) %>% 
+  summarize(
+    total = sum(mean_percentage)
+  ) %>% 
+  na.omit()
+
+# Aggregate
+wt2_native_line <- ggplot(wt2_native, aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+wt2_native_line
+
+# Central zone
+wt2_c_native_line <- ggplot(filter(wt2_native, Replicate_Zone == "C"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Central Zone", x = "Date", y = "Mean Percent Cover")
+wt2_c_native_line
+
+# Transition zone
+wt2_t_native_line <- ggplot(filter(wt2_native, Replicate_Zone == "T"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+wt2_t_native_line
+
+# Upland zone
+wt2_u_native_line <- ggplot(filter(wt2_native, Replicate_Zone == "U"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Upland Zone", x = "Date", y = "Mean Percent Cover")
+wt2_u_native_line
+
 ```
 
 # Creekside
 
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# Aggregate CS data
+cs_percent_cover_summary <- cs_percent_cover %>% 
+  group_by(Species, date, Native_Status, Replicate_Zone) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    )
+
+# Aggregate percentages
+cs_line <- ggplot(cs_percent_cover_summary, aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+cs_line
+
+# Central zone percentages
+cs_c_line <- filter(cs_percent_cover, Replicate_Zone == "C") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Central Zone", x = "Date", y = "Mean Percent Cover")
+cs_c_line
+
+# Transition zone percentages
+cs_t_line <- filter(cs_percent_cover, Replicate_Zone == "T") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+cs_t_line
+
+# Upland zone percentages
+cs_u_line <- filter(cs_percent_cover, Replicate_Zone == "U") %>% 
+  group_by(Species, date, Native_Status) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    ) %>%
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+cs_u_line
+
+
+# Aggregate percentages of 12 indicative species
+cs_12_line <- filter(cs_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species", x = "Date", y = "Mean Percent Cover")
+cs_12_line
+
+# Central zone percentages of 12 indicative species
+cs_c_12_line <- filter(cs_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "C") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Central Zone", x = "Date", y = "Mean Percent Cover")
+cs_c_12_line
+
+# Transition zone percentages of 12 indicative species
+cs_t_12_line <- filter(cs_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "T") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Transition Zone", x = "Date", y = "Mean Percent Cover")
+cs_t_12_line
+
+# Upland zone percentages of 12 indicative species
+cs_u_12_line <- filter(cs_percent_cover_summary, Species == "ERVA" | Species == "ERAR" | Species == "PSBR" | Species == "ELAC" | Species == "ELMA" | Species == "PLUN" | Species == "ALSA" | Species == "CRAQ" | Species == "HOBR" | Species == "PHEL" | Species == "CEMI") %>% 
+  filter(Replicate_Zone == "U") %>% 
+  ggplot(aes(x = date, y = mean_percentage)) +
+  geom_line(aes(color = Species, group = Species)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover of 12 Indicative Species in Upland Zone", x = "Date", y = "Mean Percent Cover")
+cs_u_12_line
+
+
+# Native vs. exotic
+cs_native <- cs_percent_cover_summary %>% 
+  group_by(Native_Status, date, Replicate_Zone) %>% 
+  summarize(
+    total = sum(mean_percentage)
+  ) %>% 
+  na.omit()
+
+# Aggregate
+cs_native_line <- ggplot(cs_native, aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover", x = "Date", y = "Mean Percent Cover")
+cs_native_line
+
+# Central zone
+cs_c_native_line <- ggplot(filter(cs_native, Replicate_Zone == "C"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Central Zone", x = "Date", y = "Mean Percent Cover")
+cs_c_native_line
+
+# Transition zone
+cs_t_native_line <- ggplot(filter(cs_native, Replicate_Zone == "T"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Transition Zone", x = "Date", y = "Mean Percent Cover")
+cs_t_native_line
+
+# Upland zone
+cs_u_native_line <- ggplot(filter(cs_native, Replicate_Zone == "U"), aes(x = date, y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Percent Cover in Upland Zone", x = "Date", y = "Mean Percent Cover")
+cs_u_native_line
 
 ```
 
