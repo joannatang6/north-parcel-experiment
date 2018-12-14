@@ -1,0 +1,101 @@
+---
+title: "np_nmds"
+author: "Joanna Tang"
+date: "12/13/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include = FALSE}
+
+# Loading packages, read in data
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(vegan)
+np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
+np_percent_cover <- read_csv("np_percent_cover.csv")
+metadata <- read_csv("metadata.csv")
+
+```
+
+```{r include = FALSE}
+
+# Separate "Replicate" label into Replicate_Zone and Replicate_Number, join with species metadata, convert month and year to "date" column
+percent_cover <- np_percent_cover %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3"))
+percent_cover <- full_join(percent_cover, metadata) %>% 
+  mutate(month_number = case_when(Month == "JANUARY" ~ 1, Month == "FEBRUARY" ~ 2, Month == "MARCH" ~ 3, Month == "APRIL" ~ 4, Month == "MAY" ~ 5, Month == "JUNE" ~ 6, Month == "JULY" ~ 7, Month == "AUGUST" ~ 8, Month == "SEPTEMBER" ~ 9, Month == "OCTOBER" ~ 10, Month == "NOVEMBER" ~ 11, Month == "DECEMBER" ~ 12)) %>% 
+  mutate(date = paste(Year, month_number, "1", sep="-" ))
+percent_cover$date = as.Date(percent_cover$date)
+
+```
+
+
+# NMDS for Percent Cover April 2017
+
+```{r}
+
+# NMDS for Percent Cover April 2017
+
+# Convert data (only April 2017 central zone data) to NMDS format
+april_2017 <- percent_cover %>% 
+  filter(Month == "APRIL", Year == "2017", Replicate_Zone == "C") %>% 
+  spread(Species, percent_cover) %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  select(-Replicate, -Month, -Year, -abundance, -Replicate_Number, -date, -month_number, -Native_Status, -Species_Full_Name)
+
+# Perform NMDS
+april_2017_nmds <-  metaMDS(comm = select(april_2017, -Plot, -Replicate_Zone), distance = "bray", trace = FALSE, autotransform = FALSE)
+
+
+# Make plot of NMDS, colored by Plot
+MDS_xy <- data.frame(april_2017_nmds$points)
+MDS_xy$Plot <- april_2017$Plot
+## This makes a dataframe of MDS points organized by Plot
+
+april_2017_nmds_graph <- ggplot(MDS_xy, aes(MDS1, MDS2, color = Plot)) +
+  geom_point(alpha = .3)
+april_2017_nmds_graph
+
+# Make plot with polygons by Plot
+ordiplot(april_2017_nmds, type = "point")
+ordihull(april_2017_nmds, groups = april_2017$Plot, draw = "polygon", label = TRUE)
+
+```
+
+Plots all have overlapping polygons -- they're very similar (no matter the month). Zones also have overlapping polygons.  The most difference is seen between zones in April 2017.
+
+# NMDS for Seed Bank 2016
+
+```{r}
+
+# NMDS for Seed Bank 2016
+
+# Remove NAs from data, use only central zone data
+seedbank_2016 <- na.omit(np_2016_seedbank_master) %>% 
+  filter(Replicate == "C1" | Replicate == "C2" | Replicate == "C3")
+
+# Perform NMDS
+seedbank_2016_nmds <- metaMDS(comm = select(seedbank_2016, -Plot, -Replicate), distance = "bray", trace = FALSE, autotransform = FALSE)
+
+# Make plot of NMDS, colored by Plot
+MDS_xy <- data.frame(seedbank_2016_nmds$points)
+MDS_xy$Plot <- seedbank_2016$Plot
+## This makes a dataframe of MDS points organized by Plot
+
+seedbank_2016_nmds_graph <- ggplot(MDS_xy, aes(MDS1, MDS2, color = Plot)) +
+  geom_point(alpha = .3)
+seedbank_2016_nmds_graph
+
+# Make plot of polygons by Plot
+ordiplot(seedbank_2016_nmds, type = "n")
+ordihull(seedbank_2016_nmds, groups = seedbank_2016$Plot, draw = "polygon", label = TRUE)
+
+```
+
+Seed bank shows overlapping polygons for Plots -- they're all very similar overall.  However, only plotting the central zone shows dissimilarity.  Only plotting the transition zone also shows dissimilarity, while only plotting the upland zone shows similarity (upland invaded zone is similar).

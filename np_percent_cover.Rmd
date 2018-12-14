@@ -16,6 +16,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(knitr)
 library(kableExtra)
+library(vegan)
 np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
 np_percent_cover <- read_csv("np_percent_cover.csv")
 metadata <- read_csv("metadata.csv")
@@ -71,7 +72,7 @@ ph1_percent_cover_summary <- ph1_percent_cover %>%
 #ph1_line
 
 
-# Percentages by zone
+# Percentages by zone of species present in seeedbank
 ph1_line_facet <- ggplot(filter(ph1_percent_cover_summary, Species == "CYER" | Species == "ERCA" | Species == "FEPE" | Species == "FRSA" | Species == "HEEC" | Species == "JUBU" | Species == "LYHY" | Species == "POMO" | Species == "PSBR" | Species == "SIBE" | Species == "SOOL" | Species == "SPSP" | Species == "SYSU" | Species == "ZEMU"), aes(x = date, y = mean_percentage)) +
   geom_line(aes(color = Species, group = Species)) +
   theme(axis.text.x = element_text(angle = 90)) +
