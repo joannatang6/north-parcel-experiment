@@ -1,0 +1,177 @@
+---
+title: "np_noaa"
+author: "Joanna Tang"
+date: "1/4/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include = FALSE}
+
+# Loading packages, read in data
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(vegan)
+library(stringr)
+np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
+np_percent_cover <- read_csv("np_percent_cover.csv")
+metadata <- read_csv("metadata.csv")
+noaa <- read_csv("1567450.csv")
+
+```
+
+```{r include = FALSE}
+
+# Organizing data
+
+
+# Retain only DATE, PRCP, TAVG, TMAX, TMIN for 2016-12 to 2018 in noaa_data
+noaa_data <- noaa %>%
+  select(DATE, PRCP, TAVG, TMAX, TMIN) %>% 
+  filter(DATE == "2016-12" | str_detect(DATE, "2017") | str_detect(DATE, "2018")) %>% 
+  mutate(DATE = paste(DATE, "1", sep="-" ))
+noaa_data$DATE = as.Date(noaa_data$DATE)
+
+
+
+# Separate "Replicate" label into Replicate_Zone and Replicate_Number, join with species metadata, convert month and year to "date" column
+percent_cover <- np_percent_cover %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3"))
+percent_cover <- full_join(percent_cover, metadata) %>% 
+  mutate(month_number = case_when(Month == "JANUARY" ~ 1, Month == "FEBRUARY" ~ 2, Month == "MARCH" ~ 3, Month == "APRIL" ~ 4, Month == "MAY" ~ 5, Month == "JUNE" ~ 6, Month == "JULY" ~ 7, Month == "AUGUST" ~ 8, Month == "SEPTEMBER" ~ 9, Month == "OCTOBER" ~ 10, Month == "NOVEMBER" ~ 11, Month == "DECEMBER" ~ 12)) %>% 
+  mutate(DATE = paste(Year, month_number, "1", sep="-" ))
+percent_cover$DATE = as.Date(percent_cover$DATE)
+
+```
+
+#PH1
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# PH1
+
+## Mean PH1 percent cover
+ph1_percent_cover_summary <- percent_cover %>% 
+  filter(Plot == "PH1") %>% 
+  group_by(Species, DATE, Native_Status, Replicate_Zone) %>% 
+  summarize(
+    mean_percentage = mean(percent_cover)
+    )
+
+## Aggregate native vs. exotic percent cover
+ph1_native <- ph1_percent_cover_summary %>% 
+  group_by(Native_Status, DATE, Replicate_Zone) %>% 
+  summarize(
+    total = sum(mean_percentage)
+  ) %>% 
+  full_join(noaa_data) %>% 
+  na.omit()
+
+
+
+## Central zone native vs. exotic + precip + temp
+
+### Dataframe of native total percent cover in central zone for 2016-2018
+ph1_c_n <- ph1_native %>% 
+  filter(Native_Status == "N" & Replicate_Zone == "C") %>% 
+  full_join(., data.frame(DATE = seq.Date(from = min(ph1_native$DATE), to = max(ph1_native$DATE), by = "month"))) %>% 
+  full_join(., noaa_data)  %>% 
+  filter(PRCP != "NA") %>% 
+  replace_na(., list(Native_Status = "N", Replicate_Zone = "C", total = 0))
+
+### Dataframe of exotic total percent cover in central zone for 2016-2018
+ph1_c_e <- ph1_native %>% 
+  filter(Native_Status == "E" & Replicate_Zone == "C") %>% 
+  full_join(., data.frame(DATE = seq.Date(from = min(ph1_native$DATE), to = max(ph1_native$DATE), by = "month"))) %>% 
+  full_join(., noaa_data)  %>% 
+  filter(PRCP != "NA") %>% 
+  replace_na(., list(Native_Status = "E", Replicate_Zone = "C", total = 0))
+
+### Combining native and exotic dataframes
+ph1_c_native <- full_join(ph1_c_n, ph1_c_e)
+  
+## Graph of central zone native vs. exotic + precip + temp
+ph1_c_noaa <- ph1_c_native %>%
+  ggplot(aes(x = factor(DATE), y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  geom_line(aes(y = PRCP*10, color = "Precip (mm)", group = 1), lty = "twodash") +
+  geom_line(aes(y = TAVG, color = "Temp (F)", group = 2), lty = "twodash") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  xlab("DATE") +
+  labs(title = "PH1 Central Zone", y = "Aggregate percent cover", caption = "0% native cover when pool inundated; \n\ exotics come up when precip is low and temp is high")
+ph1_c_noaa
+
+
+
+## Transition zone native vs. exotic + precip + temp
+
+### Dataframe of native total percent cover in transition zone for 2016-2018
+ph1_t_n <- ph1_native %>% 
+  filter(Native_Status == "N" & Replicate_Zone == "T") %>% 
+  full_join(., data.frame(DATE = seq.Date(from = min(ph1_native$DATE), to = max(ph1_native$DATE), by = "month"))) %>% 
+  full_join(., noaa_data)  %>% 
+  filter(PRCP != "NA") %>% 
+  replace_na(., list(Native_Status = "N", Replicate_Zone = "T", total = 0))
+
+### Dataframe of exotic total percent cover in transition zone for 2016-2018
+ph1_t_e <- ph1_native %>% 
+  filter(Native_Status == "E" & Replicate_Zone == "T") %>% 
+  full_join(., data.frame(DATE = seq.Date(from = min(ph1_native$DATE), to = max(ph1_native$DATE), by = "month"))) %>% 
+  full_join(., noaa_data)  %>% 
+  filter(PRCP != "NA") %>% 
+  replace_na(., list(Native_Status = "E", Replicate_Zone = "C", total = 0))
+
+### Combining native and exotic dataframes
+ph1_t_native <- full_join(ph1_t_n, ph1_t_e)
+  
+## Graph of central zone native vs. exotic + precip + temp
+ph1_t_noaa <- ph1_t_native %>%
+  ggplot(aes(x = factor(DATE), y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  geom_line(aes(y = PRCP*10, color = "Precip (mm)", group = 1), lty = "twodash") +
+  geom_line(aes(y = TAVG, color = "Temp (F)", group = 2), lty = "twodash") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  xlab("DATE") +
+  labs(title = "PH1 Transition Zone", y = "Aggregate percent cover", caption = "Note 2017-12; \n\ note 2018-6 and 2018-7")
+ph1_t_noaa
+
+
+## Upland zone native vs. exotic + precip + temp
+
+### Dataframe of native total percent cover in upland zone for 2016-2018
+ph1_u_n <- ph1_native %>% 
+  filter(Native_Status == "N" & Replicate_Zone == "U") %>% 
+  full_join(., data.frame(DATE = seq.Date(from = min(ph1_native$DATE), to = max(ph1_native$DATE), by = "month"))) %>% 
+  full_join(., noaa_data)  %>% 
+  filter(PRCP != "NA") %>% 
+  replace_na(., list(Native_Status = "N", Replicate_Zone = "U", total = 0))
+
+### Dataframe of exotic total percent cover in upland zone for 2016-2018
+ph1_u_e <- ph1_native %>% 
+  filter(Native_Status == "E" & Replicate_Zone == "U") %>% 
+  full_join(., data.frame(DATE = seq.Date(from = min(ph1_native$DATE), to = max(ph1_native$DATE), by = "month"))) %>% 
+  full_join(., noaa_data)  %>% 
+  filter(PRCP != "NA") %>% 
+  replace_na(., list(Native_Status = "E", Replicate_Zone = "U", total = 0))
+
+### Combining native and exotic dataframes
+ph1_u_native <- full_join(ph1_u_n, ph1_u_e)
+  
+## Graph of upland zone native vs. exotic + precip + temp
+ph1_u_noaa <- ph1_u_native %>%
+  ggplot(aes(x = factor(DATE), y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  geom_line(aes(y = PRCP*10, color = "Precip (mm)", group = 1), lty = "twodash") +
+  geom_line(aes(y = TAVG, color = "Temp (F)", group = 2), lty = "twodash") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  xlab("DATE") +
+  labs(title = "PH1 Upland Zone", y = "Aggregate percent cover", caption = "Note exotics spike in March")
+ph1_u_noaa
+
+```
+

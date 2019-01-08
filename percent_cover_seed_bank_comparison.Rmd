@@ -1,0 +1,230 @@
+---
+title: "percent_cover_seed_bank_comparison"
+author: "Joanna Tang"
+date: "12/21/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include = FALSE}
+# Loading packages, read in data
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(vegan)
+library(car)
+library(RColorBrewer)
+library(reshape2)
+library(knitr)
+library(kableExtra)
+np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
+np_percent_cover <- read_csv("np_percent_cover.csv")
+metadata <- read_csv("metadata.csv")
+
+```
+
+```{r include = FALSE}
+# Separate "Replicate" label into Replicate_Zone and Replicate_Number, join with species metadata, convert month and year to "date" column
+np_percent_cover <- np_percent_cover %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3"))
+np_percent_cover <- full_join(np_percent_cover, metadata) %>% 
+  mutate(month_number = case_when(Month == "JANUARY" ~ 1, Month == "FEBRUARY" ~ 2, Month == "MARCH" ~ 3, Month == "APRIL" ~ 4, Month == "MAY" ~ 5, Month == "JUNE" ~ 6, Month == "JULY" ~ 7, Month == "AUGUST" ~ 8, Month == "SEPTEMBER" ~ 9, Month == "OCTOBER" ~ 10, Month == "NOVEMBER" ~ 11, Month == "DECEMBER" ~ 12)) %>% 
+  mutate(date = paste(Year, month_number, "1", sep="-" ))
+np_percent_cover$date = as.Date(np_percent_cover$date)
+
+# Make separate dataframes for each site
+
+ph1_percent_cover <- filter(np_percent_cover, Plot == "PH1")
+
+ms_percent_cover <- filter(np_percent_cover, Plot == "MS")
+
+rt_percent_cover <- filter(np_percent_cover, Plot == "RT")
+
+tp_percent_cover <- filter(np_percent_cover, Plot == "TP")
+
+wt1_percent_cover <- filter(np_percent_cover, Plot == "WT1")
+
+wt2_percent_cover <- filter(np_percent_cover, Plot == "WT2")
+
+cs_percent_cover <- filter(np_percent_cover, Plot == "CS")
+
+
+# Convert np_2016_seedbank into tidy format, remove NAs, separate "Replicate" label into Replicate_Zone and Replicate_Number
+seedbank_2016 <- gather(np_2016_seedbank_master, key = "Species", value = "Count", -c(Plot, Replicate)) %>% 
+  na.omit(np_2016_seedbank_master) %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3"))
+
+
+# Make separate dataframes for each site, with % column and species metadata
+ph1_2016_seedbank <- filter(seedbank_2016, Plot == "PH1") %>% 
+  mutate(Percent = 100*Count/sum(Count)) %>% 
+  mutate(relative_percent = 100*Count/max(Count))
+
+
+ms <- filter(seedbank_2016, Plot == "MS") %>% 
+  mutate(Percent = 100*Count/sum(Count))
+ms_2016_seedbank <- full_join(ph1_2016_seedbank, metadata)
+
+rt <- filter(seedbank_2016, Plot == "RT") %>% 
+  mutate(Percent = 100*Count/sum(Count))
+rt_2016_seedbank <- full_join(rt, metadata)
+
+tp <- filter(seedbank_2016, Plot == "TP") %>% 
+  mutate(Percent = 100*Count/sum(Count))
+tp_2016_seedbank <- full_join(tp, metadata)
+
+wt1 <- filter(seedbank_2016, Plot == "WT1") %>% 
+  mutate(Percent = 100*Count/sum(Count))
+wt1_2016_seedbank <- full_join(wt1, metadata)
+
+wt2 <- filter(seedbank_2016, Plot == "WT2") %>% 
+  mutate(Percent = 100*Count/sum(Count))
+wt2_2016_seedbank <- full_join(wt2, metadata)
+
+cs <- filter(seedbank_2016, Plot == "CS") %>% 
+  mutate(Percent = 100*Count/sum(Count))
+cs_2016_seedbank <- full_join(cs, metadata)
+
+```
+
+
+```{r include = FALSE}
+
+
+# PH1 Graphs
+
+# Maximums of Percent Cover by Zone
+ph1_pc_summary <- ph1_percent_cover %>% 
+  select(Species, percent_cover, Replicate_Zone) %>% 
+  group_by(Species, Replicate_Zone) %>% 
+  summarize(
+    max_pc = max(percent_cover)
+    ) %>% 
+  filter(Species != "WATER" & Species != "THATCH" & Species != "BARE")
+
+# Means of Percent Count by Zone
+ph1_sb_totals <- filter(seedbank_2016, Plot == "PH1") %>% 
+  select(Species, Count, Replicate_Zone, Replicate) %>% 
+  filter(Count>0) %>% 
+  group_by(Replicate, Replicate_Zone) %>% 
+  summarize(
+    total = sum(Count)
+  )
+
+ph1_sb_c1 <- filter(seedbank_2016, Plot == "PH1") %>% 
+  select(Species, Count, Replicate_Zone, Replicate) %>% 
+  filter(Count>0, Replicate == "C1") %>% 
+  mutate(percent = 100*Count/sum(Count))
+ph1_sb_c2 <- filter(seedbank_2016, Plot == "PH1") %>% 
+  select(Species, Count, Replicate_Zone, Replicate) %>% 
+  filter(Count>0, Replicate == "C2") %>% 
+  mutate(percent = 100*Count/sum(Count))
+ph1_sb_c3 <- filter(seedbank_2016, Plot == "PH1") %>% 
+  select(Species, Count, Replicate_Zone, Replicate) %>% 
+  filter(Count>0, Replicate == "C3") %>% 
+  mutate(percent = 100*Count/sum(Count))
+ph1_sb_t1 <- filter(seedbank_2016, Plot == "PH1") %>% 
+  select(Species, Count, Replicate_Zone, Replicate) %>% 
+  filter(Count>0, Replicate == "T1") %>% 
+  mutate(percent = 100*Count/sum(Count))
+ph1_sb_t2 <- filter(seedbank_2016, Plot == "PH1") %>% 
+  select(Species, Count, Replicate_Zone, Replicate) %>% 
+  filter(Count>0, Replicate == "T2") %>% 
+  mutate(percent = 100*Count/sum(Count))
+ph1_sb_t3 <- filter(seedbank_2016, Plot == "PH1") %>% 
+  select(Species, Count, Replicate_Zone, Replicate) %>% 
+  filter(Count>0, Replicate == "T3") %>% 
+  mutate(percent = 100*Count/sum(Count))
+ph1_sb_u1 <- filter(seedbank_2016, Plot == "PH1") %>% 
+  select(Species, Count, Replicate_Zone, Replicate) %>% 
+  filter(Count>0, Replicate == "U1") %>% 
+  mutate(percent = 100*Count/sum(Count))
+ph1_sb_u2 <- filter(seedbank_2016, Plot == "PH1") %>% 
+  select(Species, Count, Replicate_Zone, Replicate) %>% 
+  filter(Count>0, Replicate == "U2") %>% 
+  mutate(percent = 100*Count/sum(Count))
+ph1_sb_u3 <- filter(seedbank_2016, Plot == "PH1") %>% 
+  select(Species, Count, Replicate_Zone, Replicate) %>% 
+  filter(Count>0, Replicate == "U3") %>% 
+  mutate(percent = 100*Count/sum(Count))
+ph1_sb_summary <- rbind(ph1_sb_c1, ph1_sb_c2, ph1_sb_c3, ph1_sb_t1, ph1_sb_t2, ph1_sb_t3, ph1_sb_u1, ph1_sb_u2, ph1_sb_u3) %>% 
+  group_by(Species, Replicate_Zone) %>% 
+  summarize(
+    mean_count = mean(percent)
+  )
+
+
+# Graphs comparing percent cover July 2017 to seed bank
+ph1_c_comparison <- full_join(ph1_pc_summary, ph1_sb_summary) %>% 
+    mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  melt() %>% 
+  filter(Replicate_Zone == "C") %>% 
+  ggplot(aes(x = Species, y = value)) +
+  geom_col(aes(fill = variable), position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90, face = c('plain', 'plain', 'plain', 'bold', 'bold', 'bold', 'bold', 'plain', 'plain', 'plain', 'plain', 'plain', 'bold', 'bold', 'plain', 'plain', 'plain', 'plain', 'bold')))
+ph1_c_comparison
+
+ph1_t_comparison <- full_join(ph1_pc_summary, ph1_sb_summary) %>% 
+    mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  melt() %>% 
+  filter(Replicate_Zone == "T") %>% 
+  ggplot(aes(x = Species, y = value)) +
+  geom_col(aes(fill = variable), position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90, face = c('bold', 'plain', 'plain', 'bold', 'plain', 'bold', 'bold', 'bold', 'plain', 'bold', 'plain', 'bold', 'plain', 'plain', 'plain', 'bold', 'bold', 'plain', 'bold', 'plain', 'plain', 'bold', 'plain', 'plain', 'bold', 'plain', 'plain', 'bold')))
+ph1_t_comparison
+
+
+ph1_u_comparison <- full_join(ph1_pc_summary, ph1_sb_summary) %>% 
+    mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  melt() %>% 
+  filter(Replicate_Zone == "T") %>% 
+  ggplot(aes(x = Species, y = value)) +
+  geom_col(aes(fill = variable), position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90, face = c('bold', 'plain', 'plain', 'plain', 'plain', 'bold', 'bold', 'bold', 'plain', 'bold', 'plain', 'bold', 'plain', 'plain', 'plain', 'bold', 'bold', 'plain', 'bold', 'plain', 'plain', 'bold', 'plain', 'plain', 'bold', 'plain', 'plain', 'bold')))
+ph1_u_comparison
+
+
+# Natives bolded
+
+```
+
+```{r echo = FALSE, message = FALSE}
+
+# PH1 Tables
+
+# Tables comparing percent cover July 2017 to seed bank
+ph1_c_table <- full_join(ph1_pc_summary, ph1_sb_summary) %>% 
+    mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  filter(Replicate_Zone == "C") %>% 
+  kable() %>% 
+  row_spec(14:15, bold = TRUE) %>% 
+  kable_styling(bootstrap_options = c("striped"))
+ph1_c_table
+
+ph1_t_table <- full_join(ph1_pc_summary, ph1_sb_summary) %>% 
+    mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  filter(Replicate_Zone == "T") %>% 
+  kable() %>% 
+  row_spec(c(6,11, 13, 16, 17, 18), bold = TRUE) %>% 
+  kable_styling(bootstrap_options = c("striped"))
+ph1_t_table
+
+ph1_u_table <- full_join(ph1_pc_summary, ph1_sb_summary) %>% 
+    mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  filter(Replicate_Zone == "U") %>% 
+  kable() %>% 
+  row_spec(c(9, 12, 14, 18, 21, 26, 28, 30, 38), bold = TRUE) %>% 
+  kable_styling(bootstrap_options = c("striped"))
+ph1_u_table
+
+
+
+
+```
+
+Only a few species are found both in the seed bank and in the plots.

@@ -1,0 +1,376 @@
+---
+title: "np_seed_bank"
+author: "Joanna Tang"
+date: "1/7/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include = FALSE}
+# Loading packages, read in data
+
+library(tidyverse)
+library(janitor)
+library(knitr)
+library(kableExtra)
+np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
+metadata <- read_csv("metadata.csv")
+
+```
+
+```{r include = FALSE}
+
+# Convert np_2016_seedbank into tidy format, remove NAs, separate "Replicate" label into Replicate_Zone and Replicate_Number, join with species metadata
+
+seedbank_2016 <- gather(np_2016_seedbank_master, key = "Species", value = "Count", -c(Plot, Replicate)) %>% 
+  na.omit(np_2016_seedbank_master) %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3")) %>% 
+  full_join(metadata)
+
+
+```
+
+Natives more abundant than exotics, exotics increase from C to T to U
+Not much in central zone
+Lots of JUBU
+Thoughts on BAPI, SYSU (natives that aren't vernal pool specialists)
+SPSP problem in WT1
+
+# Phase 1 Seed Bank 2016
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# PH1
+
+## PH1 dataframe
+ph1 <- seedbank_2016 %>%
+  filter(Plot == "PH1") %>% 
+  select(-Plot) %>% 
+  group_by(Species, Replicate_Zone, Native_Status) %>% 
+  summarize(
+    mean = mean(Count),
+    total = sum(Count)
+  ) %>% 
+  filter(total != 0)
+
+## Graph of total counts
+ph1_total_2016 <- ggplot(ph1, aes(x = reorder(Species, -total), y = total)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Total species abundance (2016)", y = "Abundance (total count)", x = "Species", caption = "JUBU dominant, PSBR present")
+ph1_total_2016
+
+## Graph of central zone
+ph1_c_2016 <- ggplot(filter(ph1, Replicate_Zone == "C"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Central zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "No indicative vernal pool species")
+ph1_c_2016
+
+## Graph of transition zone
+ph1_t_2016 <- ggplot(filter(ph1, Replicate_Zone == "T"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "JUBU dominant, PSBR present")
+ph1_t_2016
+
+## Graph of upland zone
+ph1_u_2016 <- ggplot(filter(ph1, Replicate_Zone == "U"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Upland zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "FEPE dominant, JUBU present")
+ph1_u_2016
+
+```
+
+# Mini South Seed Bank 2016
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# MS
+
+## MS dataframe
+ms <- seedbank_2016 %>%
+  filter(Plot == "MS") %>% 
+  select(-Plot) %>% 
+  group_by(Species, Replicate_Zone, Native_Status) %>% 
+  summarize(
+    mean = mean(Count),
+    total = sum(Count)
+  ) %>% 
+  filter(total != 0)
+
+## Graph of total counts
+ms_total_2016 <- ggplot(ph1, aes(x = reorder(Species, -total), y = total)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Total species abundance (2016)", y = "Abundance (total count)", x = "Species", caption = "JUBU dominant, PSBR present")
+ms_total_2016
+
+## Graph of central zone
+ms_c_2016 <- ggplot(filter(ms, Replicate_Zone == "C"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Central zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "No indicative vernal pool species")
+ms_c_2016
+
+## Graph of transition zone
+ms_t_2016 <- ggplot(filter(ms, Replicate_Zone == "T"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "COSU dominant, JUBU present")
+ms_t_2016
+
+## Graph of upland zone
+ms_u_2016 <- ggplot(filter(ms, Replicate_Zone == "U"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Upland zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "ERCA dominant")
+ms_u_2016
+
+```
+
+
+# Redtail Seed Bank 2016
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# RT
+
+## RT dataframe
+rt <- seedbank_2016 %>%
+  filter(Plot == "RT") %>% 
+  select(-Plot) %>% 
+  group_by(Species, Replicate_Zone, Native_Status) %>% 
+  summarize(
+    mean = mean(Count),
+    total = sum(Count)
+  ) %>% 
+  filter(total != 0)
+
+## Graph of total counts
+rt_total_2016 <- ggplot(rt, aes(x = reorder(Species, -total), y = total)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Total species abundance (2016)", y = "Abundance (total count)", x = "Species", caption = "JUBU dominant, no indicative vernal pool species")
+rt_total_2016
+
+## Graph of central zone
+rt_c_2016 <- ggplot(filter(rt, Replicate_Zone == "C"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Central zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "No indicative vernal pool species")
+rt_c_2016
+
+## Graph of transition zone
+rt_t_2016 <- ggplot(filter(rt, Replicate_Zone == "T"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "JUBU dominant, no indicative vernal pool species present")
+rt_t_2016
+
+## Graph of upland zone
+rt_u_2016 <- ggplot(filter(rt, Replicate_Zone == "U"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Upland zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "COSU dominant, FEPE present")
+rt_u_2016
+
+```
+
+
+# Tadpole Seed Bank 2016
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# TP
+
+## TP dataframe
+tp <- seedbank_2016 %>%
+  filter(Plot == "TP") %>% 
+  select(-Plot) %>% 
+  group_by(Species, Replicate_Zone, Native_Status) %>% 
+  summarize(
+    mean = mean(Count),
+    total = sum(Count)
+  ) %>% 
+  filter(total != 0)
+
+## Graph of total counts
+tp_total_2016 <- ggplot(tp, aes(x = reorder(Species, -total), y = total)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Total species abundance (2016)", y = "Abundance (total count)", x = "Species", caption = "JUBU dominant, ELMA present")
+tp_total_2016
+
+## Graph of central zone
+tp_c_2016 <- ggplot(filter(tp, Replicate_Zone == "C"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Central zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "COSU & BAPI dominant, ELMA present")
+tp_c_2016
+
+## Graph of transition zone
+tp_t_2016 <- ggplot(filter(tp, Replicate_Zone == "T"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "JUBU dominant")
+tp_t_2016
+
+## Graph of upland zone
+tp_u_2016 <- ggplot(filter(tp, Replicate_Zone == "U"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Upland zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "COSU dominant")
+tp_u_2016
+
+```
+
+
+# Whitetail 1 Seed Bank 2016
+SPSP problem
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# WT1
+
+## WT1 dataframe
+wt1 <- seedbank_2016 %>%
+  filter(Plot == "WT1") %>% 
+  select(-Plot) %>% 
+  group_by(Species, Replicate_Zone, Native_Status) %>% 
+  summarize(
+    mean = mean(Count),
+    total = sum(Count)
+  ) %>% 
+  filter(total != 0)
+
+## Graph of total counts
+wt1_total_2016 <- ggplot(wt1, aes(x = reorder(Species, -total), y = total)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Total species abundance (2016)", y = "Abundance (total count)", x = "Species", caption = "SPSP & JUBU dominant, no indiciative vernal pool species")
+wt1_total_2016
+
+## Graph of central zone
+wt1_c_2016 <- ggplot(filter(wt1, Replicate_Zone == "C"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Central zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "BAPI dominant, JUBU present")
+wt1_c_2016
+
+## Graph of transition zone
+wt1_t_2016 <- ggplot(filter(wt1, Replicate_Zone == "T"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "JUBU & SPSP dominant")
+wt1_t_2016
+
+## Graph of upland zone
+wt1_u_2016 <- ggplot(filter(wt1, Replicate_Zone == "U"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "JUBU & SPSP dominant")
+wt1_u_2016
+
+```
+
+
+# Whitetail 1 Seed Bank 2016
+SPSP problem
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# WT1
+
+## WT dataframe
+wt1 <- seedbank_2016 %>%
+  filter(Plot == "WT1") %>% 
+  select(-Plot) %>% 
+  group_by(Species, Replicate_Zone, Native_Status) %>% 
+  summarize(
+    mean = mean(Count),
+    total = sum(Count)
+  ) %>% 
+  filter(total != 0)
+
+## Graph of total counts
+wt1_total_2016 <- ggplot(wt1, aes(x = reorder(Species, -total), y = total)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Total species abundance (2016)", y = "Abundance (total count)", x = "Species", caption = "SPSP & JUBU dominant, no indiciative vernal pool species")
+wt1_total_2016
+
+## Graph of central zone
+wt1_c_2016 <- ggplot(filter(wt1, Replicate_Zone == "C"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Central zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "BAPI dominant, JUBU present")
+wt1_c_2016
+
+## Graph of transition zone
+wt1_t_2016 <- ggplot(filter(wt1, Replicate_Zone == "T"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "JUBU & SPSP dominant")
+wt1_t_2016
+
+## Graph of upland zone
+wt1_u_2016 <- ggplot(filter(wt1, Replicate_Zone == "U"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "JUBU & SPSP dominant")
+wt1_u_2016
+
+```
+
+# Creekside Seed Bank 2016
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# CS
+
+## CS dataframe
+cs <- seedbank_2016 %>%
+  filter(Plot == "CS") %>% 
+  select(-Plot) %>% 
+  group_by(Species, Replicate_Zone, Native_Status) %>% 
+  summarize(
+    mean = mean(Count),
+    total = sum(Count)
+  ) %>% 
+  filter(total != 0)
+
+## Graph of total counts
+cs_total_2016 <- ggplot(cs, aes(x = reorder(Species, -total), y = total)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Total species abundance (2016)", y = "Abundance (total count)", x = "Species", caption = "ZEMU dominant, JUBU & PSBR present")
+cs_total_2016
+
+## Graph of central zone
+cs_c_2016 <- ggplot(filter(cs, Replicate_Zone == "C"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Central zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "COSU & OXCO dominant, JUBU & PSBR present")
+cs_c_2016
+
+## Graph of transition zone
+cs_t_2016 <- ggplot(filter(cs, Replicate_Zone == "T"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "ZEMU dominant, JUBU present")
+cs_t_2016
+
+## Graph of upland zone
+cs_u_2016 <- ggplot(filter(cs, Replicate_Zone == "U"), aes(x = reorder(Species, -mean), y = mean)) +
+  geom_col(aes(fill = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Transition zone species abundance (2016)", y = "Abundance (mean count)", x = "Species", caption = "COSU dominant")
+cs_u_2016
+
+```

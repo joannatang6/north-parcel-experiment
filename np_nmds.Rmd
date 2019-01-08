@@ -16,6 +16,8 @@ library(tidyverse)
 library(knitr)
 library(kableExtra)
 library(vegan)
+library(car)
+library(RColorBrewer)
 np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
 np_percent_cover <- read_csv("np_percent_cover.csv")
 metadata <- read_csv("metadata.csv")
@@ -25,50 +27,99 @@ metadata <- read_csv("metadata.csv")
 ```{r include = FALSE}
 
 # Separate "Replicate" label into Replicate_Zone and Replicate_Number, join with species metadata, convert month and year to "date" column
-percent_cover <- np_percent_cover %>% 
+np_percent_cover <- np_percent_cover %>% 
   mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
   mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3"))
-percent_cover <- full_join(percent_cover, metadata) %>% 
+np_percent_cover <- full_join(np_percent_cover, metadata) %>% 
   mutate(month_number = case_when(Month == "JANUARY" ~ 1, Month == "FEBRUARY" ~ 2, Month == "MARCH" ~ 3, Month == "APRIL" ~ 4, Month == "MAY" ~ 5, Month == "JUNE" ~ 6, Month == "JULY" ~ 7, Month == "AUGUST" ~ 8, Month == "SEPTEMBER" ~ 9, Month == "OCTOBER" ~ 10, Month == "NOVEMBER" ~ 11, Month == "DECEMBER" ~ 12)) %>% 
   mutate(date = paste(Year, month_number, "1", sep="-" ))
-percent_cover$date = as.Date(percent_cover$date)
+np_percent_cover$date = as.Date(np_percent_cover$date)
 
 ```
 
 
-# NMDS for Percent Cover April 2017
+# NMDS for Percent Cover April 2017 by Zone
 
 ```{r}
 
-# NMDS for Percent Cover April 2017
+# NMDS for Percent Cover April 2017 by Zone
 
 # Convert data (only April 2017 central zone data) to NMDS format
-april_2017 <- percent_cover %>% 
+april_2017_c <- np_percent_cover %>% 
   filter(Month == "APRIL", Year == "2017", Replicate_Zone == "C") %>% 
   spread(Species, percent_cover) %>% 
   mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
   select(-Replicate, -Month, -Year, -abundance, -Replicate_Number, -date, -month_number, -Native_Status, -Species_Full_Name)
 
-# Perform NMDS
-april_2017_nmds <-  metaMDS(comm = select(april_2017, -Plot, -Replicate_Zone), distance = "bray", trace = FALSE, autotransform = FALSE)
-
+# Perform NMDS for central zone
+april_2017_c_nmds <-  metaMDS(comm = select(april_2017_c, -Plot, -Replicate_Zone), distance = "bray", trace = FALSE, autotransform = FALSE)
 
 # Make plot of NMDS, colored by Plot
-MDS_xy <- data.frame(april_2017_nmds$points)
-MDS_xy$Plot <- april_2017$Plot
+MDS_xy <- data.frame(april_2017_c_nmds$points)
+MDS_xy$Plot <- april_2017_c$Plot
 ## This makes a dataframe of MDS points organized by Plot
 
-april_2017_nmds_graph <- ggplot(MDS_xy, aes(MDS1, MDS2, color = Plot)) +
+april_2017_c_nmds_graph <- ggplot(MDS_xy, aes(MDS1, MDS2, color = Plot)) +
   geom_point(alpha = .3)
-april_2017_nmds_graph
+april_2017_c_nmds_graph
 
 # Make plot with polygons by Plot
+ordiplot(april_2017_c_nmds, type = "point")
+ordihull(april_2017_c_nmds, groups = april_2017_c$Plot, draw = "polygon", label = TRUE)
+
+
+
+# Convert data (only April 2017 transition zone data) to NMDS format
+april_2017_t <- np_percent_cover %>% 
+  filter(Month == "APRIL", Year == "2017", Replicate_Zone == "T") %>% 
+  spread(Species, percent_cover) %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  select(-Replicate, -Month, -Year, -abundance, -Replicate_Number, -date, -month_number, -Native_Status, -Species_Full_Name)
+
+# Perform NMDS for transition zone
+april_2017_t_nmds <-  metaMDS(comm = select(april_2017_t, -Plot, -Replicate_Zone), distance = "bray", trace = FALSE, autotransform = FALSE)
+
+# Make plot with polygons by Plot
+ordiplot(april_2017_t_nmds, type = "point")
+ordihull(april_2017_t_nmds, groups = april_2017_t$Plot, draw = "polygon", label = TRUE)
+
+
+
+# Convert data (only April 2017 upland zone data) to NMDS format
+april_2017_u <- np_percent_cover %>% 
+  filter(Month == "APRIL", Year == "2017", Replicate_Zone == "U") %>% 
+  spread(Species, percent_cover) %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  select(-Replicate, -Month, -Year, -abundance, -Replicate_Number, -date, -month_number, -Native_Status, -Species_Full_Name)
+
+# Perform NMDS for upland zone
+april_2017_u_nmds <-  metaMDS(comm = select(april_2017_u, -Plot, -Replicate_Zone), distance = "bray", trace = FALSE, autotransform = FALSE)
+
+# Make plot with polygons by Plot
+ordiplot(april_2017_u_nmds, type = "point")
+ordihull(april_2017_u_nmds, groups = april_2017_u$Plot, draw = "polygon", label = TRUE)
+
+
+# Convert data (only April 2017 data) to NMDS format
+april_2017 <- np_percent_cover %>% 
+  filter(Month == "APRIL", Year == "2017") %>% 
+  spread(Species, percent_cover) %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  select(-Replicate, -Month, -Year, -abundance, -Replicate_Number, -date, -month_number, -Native_Status, -Species_Full_Name)
+
+# Perform NMDS by zone
+april_2017_nmds <-  metaMDS(comm = select(april_2017, -Plot, -Replicate_Zone), distance = "bray", trace = FALSE, autotransform = FALSE)
+
+# Make plot with polygons by zone
 ordiplot(april_2017_nmds, type = "point")
-ordihull(april_2017_nmds, groups = april_2017$Plot, draw = "polygon", label = TRUE)
+ordihull(april_2017_nmds, groups = april_2017$Replicate_Zone, draw = "polygon", label = TRUE)
+
+
 
 ```
 
-Plots all have overlapping polygons -- they're very similar (no matter the month). Zones also have overlapping polygons.  The most difference is seen between zones in April 2017.
+Plots all have overlapping polygons -- they're very similar (no matter the month). Zones also have overlapping polygons.  The most difference is seen between plots on the central zone in April 2017.
+
 
 # NMDS for Seed Bank 2016
 
@@ -77,25 +128,217 @@ Plots all have overlapping polygons -- they're very similar (no matter the month
 # NMDS for Seed Bank 2016
 
 # Remove NAs from data, use only central zone data
-seedbank_2016 <- na.omit(np_2016_seedbank_master) %>% 
+seedbank_2016_c <- na.omit(np_2016_seedbank_master) %>% 
   filter(Replicate == "C1" | Replicate == "C2" | Replicate == "C3")
 
 # Perform NMDS
-seedbank_2016_nmds <- metaMDS(comm = select(seedbank_2016, -Plot, -Replicate), distance = "bray", trace = FALSE, autotransform = FALSE)
+seedbank_2016_c_nmds <- metaMDS(comm = select(seedbank_2016_c, -Plot, -Replicate), distance = "bray", trace = FALSE, autotransform = FALSE)
 
 # Make plot of NMDS, colored by Plot
-MDS_xy <- data.frame(seedbank_2016_nmds$points)
-MDS_xy$Plot <- seedbank_2016$Plot
+MDS_xy <- data.frame(seedbank_2016_c_nmds$points)
+MDS_xy$Plot <- seedbank_2016_c$Plot
 ## This makes a dataframe of MDS points organized by Plot
 
-seedbank_2016_nmds_graph <- ggplot(MDS_xy, aes(MDS1, MDS2, color = Plot)) +
+seedbank_2016_c_nmds_graph <- ggplot(MDS_xy, aes(MDS1, MDS2, color = Plot)) +
   geom_point(alpha = .3)
-seedbank_2016_nmds_graph
+seedbank_2016_c_nmds_graph
 
 # Make plot of polygons by Plot
-ordiplot(seedbank_2016_nmds, type = "n")
-ordihull(seedbank_2016_nmds, groups = seedbank_2016$Plot, draw = "polygon", label = TRUE)
+ordiplot(seedbank_2016_c_nmds, type = "n")
+ordihull(seedbank_2016_c_nmds, groups = seedbank_2016_c$Plot, draw = "polygon", label = TRUE)
+
+
+
+# Remove NAs from data, use only transition zone data
+seedbank_2016_t <- na.omit(np_2016_seedbank_master) %>% 
+  filter(Replicate == "T1" | Replicate == "T2" | Replicate == "T3")
+
+# Perform NMDS
+seedbank_2016_t_nmds <- metaMDS(comm = select(seedbank_2016_t, -Plot, -Replicate), distance = "bray", trace = FALSE, autotransform = FALSE)
+
+# Make plot of polygons by Plot
+ordiplot(seedbank_2016_t_nmds, type = "n")
+ordihull(seedbank_2016_t_nmds, groups = seedbank_2016_t$Plot, draw = "polygon", label = TRUE)
+
+
+# Remove NAs from data, use only upland zone data
+seedbank_2016_u <- na.omit(np_2016_seedbank_master) %>% 
+  filter(Replicate == "U1" | Replicate == "U2" | Replicate == "U3")
+
+# Perform NMDS
+seedbank_2016_u_nmds <- metaMDS(comm = select(seedbank_2016_u, -Plot, -Replicate), distance = "bray", trace = FALSE, autotransform = FALSE)
+
+# Make plot of polygons by Plot
+ordiplot(seedbank_2016_u_nmds, type = "n")
+ordihull(seedbank_2016_u_nmds, groups = seedbank_2016_u$Plot, draw = "polygon", label = TRUE)
+
 
 ```
 
 Seed bank shows overlapping polygons for Plots -- they're all very similar overall.  However, only plotting the central zone shows dissimilarity.  Only plotting the transition zone also shows dissimilarity, while only plotting the upland zone shows similarity (upland invaded zone is similar).
+
+
+So -- seed banks are less similar than percent cover data.
+
+# NMDS with Maximum Percent Cover
+
+```{r}
+
+# NMDS with Maximum Percent Cover
+
+
+# Calculate max percent cover for each species in each zone, format data into NMDS format
+max_percent_cover <- np_percent_cover %>% 
+   filter(Species != "BARE" & Species != "THATCH" & Species != "WATER") %>% 
+  group_by(Plot, Replicate_Zone, Species) %>% 
+  summarize(
+  max = max(percent_cover)
+) %>% 
+  spread(Species, max) %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .)))
+
+max_matrix <- as.data.frame(max_percent_cover) %>% 
+  select(-Plot, -Replicate_Zone)
+
+# Perform NMDS
+
+max_percent_cover_nmds <- metaMDS(comm = max_matrix, distance = "bray", trace = FALSE, autotransform = FALSE)
+
+# Make plot of NMDS, colored by Plot
+MDS_xy <- data.frame(max_percent_cover_nmds$points)
+MDS_xy$Plot <- max_percent_cover$Plot
+MDS_xy$Replicate_Zone <- max_percent_cover$Replicate_Zone
+## This makes a dataframe of MDS points organized by Plot
+
+max_nmds_graph <- ggplot(MDS_xy, aes(MDS1, MDS2, color = Plot)) +
+  geom_point(alpha = .3) +
+  facet_wrap(~Replicate_Zone)
+max_nmds_graph
+
+# Make plot of polygons by Plot
+ordiplot(max_percent_cover_nmds, type = "point")
+ordihull(max_percent_cover_nmds, groups = max_percent_cover$Plot, draw = "polygon", label = TRUE)
+
+
+ordiplot(max_percent_cover_nmds, type = "point")
+ordihull(max_percent_cover_nmds, groups = max_percent_cover$Plot, draw = "polygon", label = TRUE)
+
+
+
+```
+
+
+# Maximum Percent Cover of Each Species, by native status, pool, and zone (with annotation on species richness)
+
+```{r}
+
+# Native species richness
+native_species_richness <- np_percent_cover %>% 
+   filter(Species != "BARE" & Species != "THATCH" & Species != "WATER" & Native_Status == "N") %>% 
+  group_by(Plot, Replicate_Zone, Species) %>% 
+  summarize(
+  max = max(percent_cover)
+) %>%
+  add_tally() #species richness in each zone
+
+# Exotic species richness
+exotic_species_richness <- np_percent_cover %>% 
+   filter(Species != "BARE" & Species != "THATCH" & Species != "WATER" & Native_Status == "E") %>% 
+  group_by(Plot, Replicate_Zone, Species) %>% 
+  summarize(
+  max = max(percent_cover)
+) %>%
+  add_tally() #species richness in each zone
+
+
+
+
+# Native species, central zone
+native_species_max_c <- np_percent_cover %>% 
+  group_by(Plot, Replicate_Zone, Species, Native_Status) %>% 
+  summarize(
+  max = max(percent_cover)
+) %>% 
+  filter(Replicate_Zone == "C" & Native_Status == "N") %>% 
+  ggplot(aes(x = Species, y = max)) +
+  geom_col(aes(fill = Plot), position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_brewer(palette = "Accent") +
+  labs(title = "Percent Cover of Native Species in Central Zones", y = "Max Percent Cover", caption = "ELMA, JUPH, SYSU common; \n Native species richness/total species richness: CS = 9/19, MS = 5/11, \n PH1 = 5/15, RT = 4/4, TP = 3/6, WT1 = 7/14, WT2 = 7/11; \n note DISP in TP, ERVA in PH1, JUME in CS, \n JUPH in MS, SCAM and SCPU in WT1/2")
+native_species_max_c
+
+# Exotic species, central zone
+exotic_species_max_c <- np_percent_cover %>% 
+  group_by(Plot, Replicate_Zone, Species, Native_Status) %>% 
+  summarize(
+  max = max(percent_cover)
+) %>% 
+  filter(Replicate_Zone == "C" & Native_Status == "E") %>% 
+  ggplot(aes(x = Species, y = max)) +
+  geom_col(aes(fill = Plot), position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_brewer(palette = "Accent") +
+  labs(title = "Percent Cover of Exotic Species in Central Zones", y = "Max Percent Cover", caption = "GEDI, MEPO, SOOL common; \n Exotic species richness: CS = 10/19, MS = 6/11, \n PH1 = 10/15, RT = 0/4, TP = 3/6, WT1 = 7/14, WT2 = 4/11; \n note ALSA in RT, CRSC in MS")
+exotic_species_max_c
+
+# Native species, transition zone
+native_species_max_t <- np_percent_cover %>% 
+  group_by(Plot, Replicate_Zone, Species, Native_Status) %>% 
+  summarize(
+  max = max(percent_cover)
+) %>% 
+  filter(Replicate_Zone == "T" & Native_Status == "N") %>% 
+  ggplot(aes(x = Species, y = max)) +
+  geom_col(aes(fill = Plot), position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_brewer(palette = "Accent") +
+  labs(title = "Percent Cover of Native Species in Transition Zones", y = "Max Percent Cover", caption = "BOMA, CEPA, CYER, DISP, ELMA, EPBR, HOBR, JUBU, JUPA, RUSA, SYSU, ZEMU common; \n Native species richness: CS = 14/29, MS = 10/20, \n PH1 = 8/21, RT = 20/39, TP = 17/32, WT1 = 25/44, WT2 = 26/43; \n note ERVA in PH1, varying ELMA, \n varying HOBRBR, PHLE in RT, TP, WT2, PSBR in RT")
+native_species_max_t
+
+# Exotic species, transition zone
+exotic_species_max_t <- np_percent_cover %>% 
+  group_by(Plot, Replicate_Zone, Species, Native_Status) %>% 
+  summarize(
+  max = max(percent_cover)
+) %>% 
+  filter(Replicate_Zone == "T" & Native_Status == "E") %>% 
+  ggplot(aes(x = Species, y = max)) +
+  geom_col(aes(fill = Plot), position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_brewer(palette = "Accent") +
+  labs(title = "Percent Cover of Exotic Species in Transition Zones", y = "Max Percent Cover", caption = "FEPE, GEDI, HEEC, LYHY, POAVDE, POMO, SOOL common; \n Exotic species richness: CS = 15/29, MS = 10/20, \n PH1 = 13/21, RT = 19/39, TP = 15/32, WT1 = 19/44, WT2 = 17/43; \n note FEPE in PH1, LYHY in PH1, POAN in RT, \n varying POMO, UNKGRASS in PH1 and RT")
+exotic_species_max_t
+
+# Native species, upland zone
+native_species_max_u <- np_percent_cover %>% 
+  group_by(Plot, Replicate_Zone, Species, Native_Status) %>% 
+  summarize(
+  max = max(percent_cover)
+) %>% 
+  filter(Replicate_Zone == "U" & Native_Status == "N") %>% 
+  ggplot(aes(x = Species, y = max)) +
+  geom_col(aes(fill = Plot), position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_brewer(palette = "Accent") +
+  labs(title = "Percent Cover of Native Species in Upland Zones", y = "Max Percent Cover", caption = "HOBR, EXCA, EPBR, ESCA, SIBE, STPU, SYSU, ZEMU common; \n Native species richness: CS = 8/25, MS = 8/19, \n PH1 = 15/36, RT = 13/30, TP = 18/34, WT1 = 23/47, WT2 = 16/35; \n note CYER in TP, varying HOBRBR, JUBU in TP")
+native_species_max_u
+
+# Exotic species, upland zone
+exotic_species_max_u <- np_percent_cover %>% 
+  group_by(Plot, Replicate_Zone, Species, Native_Status) %>% 
+  summarize(
+  max = max(percent_cover)
+) %>% 
+  filter(Replicate_Zone == "U" & Native_Status == "E") %>% 
+  ggplot(aes(x = Species, y = max)) +
+  geom_col(aes(fill = Plot), position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_brewer(palette = "Accent") +
+  labs(title = "Percent Cover of Exotic Species in Upland Zones", y = "Max Percent Cover", caption = "BRDI, FEMY, FEPE, LYHY, MAPA, MEPO, POMO, SOOL, SPSP, VISA common; \n Exotic species richness: CS = 17/25, MS = 11/19, \n PH1 = 21/36, RT = 17/30, TP = 16/34, WT1 = 24/47, WT2 = 19/35; \n note BRDI in RT, BRHO in PH1, \n varying FEMY/VUMY and FEPE, UNKGRASS in PH1 and RT")
+exotic_species_max_u
+
+```
+
+WT1 and WT2 have high natives, RT and PH1 have high exotics
+
+MS has high CRSC in central zone

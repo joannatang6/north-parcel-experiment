@@ -3,8 +3,8 @@ title: "north-parcel-experiment"
 author: "Joanna Tang"
 date: "11/14/2018"
 output:
-  word_document: default
   html_document: default
+  word_document: default
 ---
 
 ```{r setup, include=FALSE}
