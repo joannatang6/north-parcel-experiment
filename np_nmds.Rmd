@@ -52,7 +52,7 @@ april_2017_c <- np_percent_cover %>%
   select(-Replicate, -Month, -Year, -abundance, -Replicate_Number, -date, -month_number, -Native_Status, -Species_Full_Name)
 
 # Perform NMDS for central zone
-april_2017_c_nmds <-  metaMDS(comm = select(april_2017_c, -Plot, -Replicate_Zone), distance = "bray", trace = FALSE, autotransform = FALSE)
+april_2017_c_nmds <-  metaMDS(comm = select(april_2017_c, -Plot, -Replicate_Zone, -Growth_Form, -Bloom_Start, -Bloom_End, -Dominant_Zone, -Max_Height, -Growth_Habit, -Wetland_Obligate, -Disturbance_Favored, -Family), distance = "bray", trace = FALSE, autotransform = FALSE)
 
 # Make plot of NMDS, colored by Plot
 MDS_xy <- data.frame(april_2017_c_nmds$points)
@@ -77,7 +77,7 @@ april_2017_t <- np_percent_cover %>%
   select(-Replicate, -Month, -Year, -abundance, -Replicate_Number, -date, -month_number, -Native_Status, -Species_Full_Name)
 
 # Perform NMDS for transition zone
-april_2017_t_nmds <-  metaMDS(comm = select(april_2017_t, -Plot, -Replicate_Zone), distance = "bray", trace = FALSE, autotransform = FALSE)
+april_2017_t_nmds <-  metaMDS(comm = select(april_2017_t, -Plot, -Replicate_Zone, -Growth_Form, -Bloom_Start, -Bloom_End, -Dominant_Zone, -Max_Height, -Growth_Habit, -Wetland_Obligate, -Disturbance_Favored, -Family), distance = "bray", trace = FALSE, autotransform = FALSE)
 
 # Make plot with polygons by Plot
 ordiplot(april_2017_t_nmds, type = "point")
@@ -93,7 +93,7 @@ april_2017_u <- np_percent_cover %>%
   select(-Replicate, -Month, -Year, -abundance, -Replicate_Number, -date, -month_number, -Native_Status, -Species_Full_Name)
 
 # Perform NMDS for upland zone
-april_2017_u_nmds <-  metaMDS(comm = select(april_2017_u, -Plot, -Replicate_Zone), distance = "bray", trace = FALSE, autotransform = FALSE)
+april_2017_u_nmds <-  metaMDS(comm = select(april_2017_u, -Plot, -Replicate_Zone, -Growth_Form, -Bloom_Start, -Bloom_End, -Dominant_Zone, -Max_Height, -Growth_Habit, -Wetland_Obligate, -Disturbance_Favored, -Family), distance = "bray", trace = FALSE, autotransform = FALSE)
 
 # Make plot with polygons by Plot
 ordiplot(april_2017_u_nmds, type = "point")
@@ -108,7 +108,7 @@ april_2017 <- np_percent_cover %>%
   select(-Replicate, -Month, -Year, -abundance, -Replicate_Number, -date, -month_number, -Native_Status, -Species_Full_Name)
 
 # Perform NMDS by zone
-april_2017_nmds <-  metaMDS(comm = select(april_2017, -Plot, -Replicate_Zone), distance = "bray", trace = FALSE, autotransform = FALSE)
+april_2017_nmds <-  metaMDS(comm = select(april_2017, -Plot, -Replicate_Zone, -Growth_Form, -Bloom_Start, -Bloom_End, -Dominant_Zone, -Max_Height, -Growth_Habit, -Wetland_Obligate, -Disturbance_Favored, -Family), distance = "bray", trace = FALSE, autotransform = FALSE)
 
 # Make plot with polygons by zone
 ordiplot(april_2017_nmds, type = "point")
@@ -342,3 +342,125 @@ exotic_species_max_u
 WT1 and WT2 have high natives, RT and PH1 have high exotics
 
 MS has high CRSC in central zone
+
+
+#From np_draft3:
+```{r}
+
+np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
+np_2018_seed_bank_master <- read_csv("np.2018.seed.bank.csv")
+
+## Convert np_2016_seedbank into tidy format, remove NAs, separate "Replicate" label into Replicate_Zone and Replicate_Number
+seedbank_2016 <- gather(np_2016_seedbank_master, key = "Species", value = "Count", -c(Plot, Replicate)) %>% 
+  na.omit(np_2016_seedbank_master) %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3")) %>% 
+  full_join(metadata)
+
+
+## Create new data frame with creation year of each pool
+creation_year_df <- data.frame(Plot = c("PH1", "TP", "RT", "MS", "WT1", "WT2", "CS"), Creation_Year = c("2010", "2012", "2012", "2015", "2014", "2014", "2013"))
+
+## Calculate total abundance of each species per Replicate for 2018 seed bank data, join to metadata
+np_seedbank_2018 <- np_2018_seed_bank_master %>% 
+  group_by(Plot, Replicate, Species) %>% 
+  summarize(Count = sum(Count)) %>% 
+  add_column(Year = 2018) %>% 
+  full_join(metadata)
+  
+  
+  
+# 2a. Compare 2016 exotic seed bank species to May 2017 anad 2018 percent cover species, by pool and zone
+
+
+## Take out zeros in 2016 seed bank data
+seedbank_2016[seedbank_2016 == 0] <- NA
+
+## Calculate exotic and native species richness for 2016 seed bank data
+richness_2016_seed_bank <- seedbank_2016 %>% 
+  add_column(Year = 2016) %>% 
+  select(Plot, Replicate, Replicate_Zone, Year, Native_Status, Count) %>% 
+    na.omit() %>%
+  group_by(Plot, Replicate, Replicate_Zone, Year, Native_Status) %>% 
+  summarize(richness = length(Count))
+
+## Calculate exotic and native species richness for May 2017/2018 percent cover data, then join with 2016 seed bank data
+np_seed_bank_cover_may <- np_percent_cover %>% 
+  filter(month_number == 5) %>% 
+  group_by(Plot, Replicate, Replicate_Zone, Year, Native_Status) %>% 
+  summarize(richness = length(percent_cover)) %>% 
+  full_join(richness_2016_seed_bank) %>% 
+  na.omit()
+
+## Calculate mean exotic species richness, by zone in each plot
+np_exotic_richness_may <- np_seed_bank_cover_may %>% 
+  filter(Native_Status == "E") %>% 
+  group_by(Year, Plot, Replicate_Zone) %>% 
+  summarize(
+    mean = mean(richness),
+    sd = sd(richness))
+
+
+## NMDS for 2016 seed bank vs. 2017
+  
+### Add Year column to seedbank_2016
+seedbank_2016_year <- seedbank_2016 %>%
+  add_column(Year = 2016)
+  
+### Convert data (only 2016 seed bank and May 2017 transition zone data) to NMDS format
+may_2017_t <- np_percent_cover %>% 
+  filter(Month == "MAY", Year == "2017", Replicate_Zone == "T") %>% 
+  rename(Count = abundance) %>% 
+  full_join(seedbank_2016_year) %>% 
+  drop_na(Count) %>% 
+  filter(Replicate_Zone == "T")
+may_2017_t <- may_2017_t[-486,]
+may_2017_t <- may_2017_t[-489,]  
+may_2017_t <- may_2017_t %>%
+  spread(Species_Full_Name, Count) %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  select(-Replicate, -Month, -Replicate_Number, -date, -month_number, -Native_Status, -Species, -Growth_Form, -Bloom_Start, -Bloom_End, -Dominant_Zone, -Max_Height, -Disturbance_Favored, -Wetland_Obligate, -Growth_Habit, -Family, -percent_cover)
+
+
+### Perform NMDS for transition zone
+may_2017_t_nmds <-  metaMDS(comm = select(may_2017_t, -Plot, -Replicate_Zone, -Year), distance = "bray", trace = FALSE, autotransform = FALSE)
+
+
+
+#extract species sources
+spp_scores <- as.data.frame(scores(may_2017_t_nmds, "species"))
+spp_scores
+
+### Make plot with polygons by Plot
+ordiplot(may_2017_t_nmds, type = "point", label = TRUE)
+ordihull(may_2017_t_nmds, groups = may_2017_t$Year, draw = "polygon", label = TRUE)
+
+```
+
+```{r}
+
+### Convert data (only 2016 seed bank and 2018 seed bank and May 2017 transition zone data, with creation_year_df) to NMDS format
+may_2017_t_2 <- np_percent_cover %>% 
+  filter(Month == "MAY", Year == "2017", Replicate_Zone == "T") %>% 
+  rename(Count = abundance) %>% 
+  full_join(seedbank_2016_year) %>% 
+  full_join(np_seedbank_2018) %>% 
+  drop_na(Count)  %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  filter(Replicate_Zone == "T") %>%
+  spread(Species_Full_Name, Count) %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  select(-Replicate, -Month, -Replicate_Number, -date, -month_number, -Native_Status, -Species, -Growth_Form, -Bloom_Start, -Bloom_End, -Dominant_Zone, -Max_Height, -Disturbance_Favored, -Wetland_Obligate, -Growth_Habit, -Family, -percent_cover)
+
+
+### Perform NMDS for transition zone
+may_2017_t_nmds_2 <-  metaMDS(comm = select(may_2017_t_2, -Plot, -Replicate_Zone, -Year), distance = "bray", trace = FALSE, autotransform = FALSE)
+
+### Make plot with polygons by Plot
+ordiplot(may_2017_t_nmds_2, type = "point", label = TRUE)
+ordihull(may_2017_t_nmds_2, groups = may_2017_t$Year, draw = "polygon", label = TRUE)
+
+```
+

@@ -1,0 +1,1579 @@
+---
+title: "NP Draft 2"
+author: "Joanna Tang"
+date: "2/6/2019"
+output: html_document
+---
+
+# Plant Eco 2/19/19
+"Cumulative percent cover"
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include = FALSE}
+
+# Loading packages, read in data
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(vegan)
+library(car)
+library(RColorBrewer)
+library(reshape2)
+library(knitr)
+library(kableExtra)
+library(FSA)
+
+np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
+np_percent_cover_master <- read_csv("np_percent_cover.csv")
+metadata <- read_csv("metadata.csv")
+np_2018_seed_bank_master <- read_csv("np.2018.seed.bank.csv")
+biomass_master <- read_csv("biomass.csv")
+
+```
+
+
+```{r include = FALSE}
+
+# Outline
+# 0. Tidy up data
+# 1. How does species abundance and diversity correlate with time since restoration?
+# 1a. compare max % cover of exotic species over time
+# 1b. compare species richness of exotic species over time
+# 1c. compare exotic biomass over time
+# 1d. compare max % cover of native species over time
+# 1e. compare species richness of native species over time
+
+# 2. What's driving different trends between pools?
+# 2a. look at exotics in each pool -- by zone
+# 2b. look at exotic biomass in each pool -- by zone
+# 2c. look at percent cover vs depth of pool
+
+# 3. How does seed bank composition change over time?
+# 3a. compare 2016 vs. 2018 seed bank abundances
+# 3b. compare 2016 vs. 2018 seed bank richnesses
+# 3c. compare 2016 seed bank vs. 2017 and 2018 percent cover, by pool
+
+```
+
+
+```{r include = FALSE}
+
+# 0. Tidy up data
+
+## Separate "Replicate" label into Replicate_Zone and Replicate_Number, join with species metadata, convert month and year to "date" column
+np_percent_cover <- np_percent_cover_master %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3"))
+np_percent_cover <- full_join(np_percent_cover, metadata) %>% 
+  mutate(month_number = case_when(Month == "JANUARY" ~ 1, Month == "FEBRUARY" ~ 2, Month == "MARCH" ~ 3, Month == "APRIL" ~ 4, Month == "MAY" ~ 5, Month == "JUNE" ~ 6, Month == "JULY" ~ 7, Month == "AUGUST" ~ 8, Month == "SEPTEMBER" ~ 9, Month == "OCTOBER" ~ 10, Month == "NOVEMBER" ~ 11, Month == "DECEMBER" ~ 12)) %>% 
+  mutate(date = paste(Year, month_number, "1", sep="-" ))
+np_percent_cover$date = as.Date(np_percent_cover$date)
+
+## Convert np_2016_seedbank into tidy format, remove NAs, separate "Replicate" label into Replicate_Zone and Replicate_Number
+seedbank_2016 <- gather(np_2016_seedbank_master, key = "Species", value = "Count", -c(Plot, Replicate)) %>% 
+  na.omit(np_2016_seedbank_master) %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3")) %>% 
+  full_join(metadata)
+
+```
+
+
+# 1. How does species percent cover and diversity correlate with time since restoration?
+
+Hypothesis: We will see increased exotic species percent cover and diversity with increased time since restoration.
+
+# 1a. Total percent cover of exotics over time since restoration
+
+Results: Increase in total exotic percent cover over time, driven by WT1, WT2, PH1, & especially RT.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1a. Compare total % cover of exotics (sum of max % cover of each species) over time since restoration
+
+
+## Create new data frame with creation year of each pool
+creation_year_df <- data.frame(Plot = c("PH1", "TP", "RT", "MS", "WT1", "WT2", "CS"), Creation_Year = c("2010", "2012", "2012", "2015", "2014", "2014", "2013"))
+
+## Add time since restoration column
+np_percent_cover_time_cover_exotic <- np_percent_cover %>%
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year, Plot) %>% 
+  summarize(total = sum(max)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year)
+  
+## Scatter plot of total % cover vs. time since
+max_exotic_time_scatter <- np_percent_cover_time_cover_exotic %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = total, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(x = Time_Since, group = NULL), se = TRUE, size = .5) +
+  labs(title = "Total Percent Cover of Exotics", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "More variation as time increases; WT1, WT2, PH1, & esp RT increased") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 200))
+max_exotic_time_scatter
+
+### Calculate lm(), R^2 of exotic % cover over time
+time_exotic_cover_lm <- lm(np_percent_cover_time_cover_exotic$total ~ np_percent_cover_time_cover_exotic$Time_Since)
+# summary(time_exotic_cover_lm)
+#total = 18.60(Time_Since) -28.92, R^2 = .3615, p = .02295
+
+### Check diagnostic graphs
+# plot(time_exotic_cover_lm)
+#diagnostic graphs look pretty good
+
+### Calculate Pearson's r
+# cor.test(np_percent_cover_time_cover_exotic$Time_Since, np_percent_cover_time_cover_exotic$total)
+#r = .60, medium correlation
+
+## Kruskal-Wallis
+
+### Check for normality
+exotic_cover_hist <- ggplot(np_percent_cover_time_cover_exotic) +
+  geom_histogram(aes(x = total))
+#exotic_cover_hist
+####not normal
+
+## Kruskal-Wallis test
+exotic_cover_time_kw <- kruskal.test(total ~ Time_Since, data = np_percent_cover_time_cover_exotic)
+#exotic_cover_time_kw
+###p = .4916, median total exotic % cover not different over time
+
+## Boxplot of total % cover vs. time since
+max_exotic_time_box <- np_percent_cover_time_cover_exotic %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = total)) +
+  geom_boxplot(width = .5) +
+  geom_jitter(aes(color = Plot), width = .1) +
+  labs(title = "Total Percent Cover of Exotics", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "More variation as time increases; WT1, WT2, PH1, & esp RT increased")
+max_exotic_time_box
+
+```
+
+
+
+# 1b. Species richness of exotics over time since restoration
+
+Results: Increase in total exotic species richness over time, driven by WT2, PH1, and especially WT1 & RT.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1b. Compare species richness (during max percent cover) of exotic species over time
+
+## Add time since restoration column
+np_richness_time_exotic <- np_percent_cover %>%
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year, Plot) %>% 
+  summarize(richness = length(max)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year)
+
+## Scatter plot of species richness vs. time since
+exotic_richness_time_scatter <- np_richness_time_exotic %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = richness, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(x = Time_Since, group = NULL), se = TRUE, size = .5) +
+  labs(title = "Species Richness of Exotics", x = "Time Since Restoration (years)", y = "Species Richness", caption = "High variation; WT2, PH1, & esp WT1 and RT increased") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,25))
+exotic_richness_time_scatter
+
+### Calculate lm(), R^2 of exotic richness over time
+time_exotic_richness_lm <- lm(np_richness_time_exotic$richness ~ np_richness_time_exotic$Time_Since)
+# summary(time_exotic_richness_lm)
+#richness = .3762(Time_Since) + 14.25, R^2 = .06752, p = .3696
+
+### Check diagnostic graphs
+# plot(time_exotic_richness_lm)
+#diagnostic graphs look pretty good
+
+### Calculate Pearson's r
+# cor.test(np_richness_time_exotic$Time_Since, np_richness_time_exotic$richness)
+#r = .26, weak correlation
+
+## Kruskal-Wallis
+
+### Check for normality
+exotic_richness_hist <- ggplot(np_richness_time_exotic) +
+  geom_histogram(aes(x = richness))
+#exotic_cover_hist
+####not normal
+
+## Kruskal-Wallis test
+exotic_richness_time_kw <- kruskal.test(richness ~ Time_Since, data = np_richness_time_exotic)
+#exotic_richness_time_kw
+###
+
+```
+
+# 1c. Look at exotic biomass over time
+
+Results: Increase in total exotic species biomass over time, driven by WT1 and especially RT.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1c. Look at total exotic biomass per year over time
+
+## Summarize total biomass for each year, add time since restoration column
+biomass <- biomass_master %>% 
+  filter(Year >2016) %>% 
+  group_by(Year, Plot) %>% 
+  summarize(total = sum(biomass_g)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year)
+
+## Plot total biomass over time
+biomass_scatter <- biomass %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = total, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(x = Time_Since, group = NULL), se = TRUE, size = .5) +
+  labs(title = "Total Exotic Biomass", x = "Time Since Restoration (years)", y = "Biomass (g)", caption = "More variation as time increases; WT1 & esp RT increased") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,450))
+biomass_scatter
+
+### Calculate lm(), R^2 of exotic biomass over time
+time_biomass_lm <- lm(biomass$total ~ biomass$Time_Since)
+# summary(time_biomass_lm)
+#biomass = 63.05(Time_Since) - 106.62, R^2 = .4413, p = .0096
+
+### Check diagnostic graphs
+# plot(time_biomass_lm)
+#diagnostic graphs look pretty good
+
+### Calculate Pearson's r
+# cor.test(biomass$Time_Since, biomass$total)
+#r = .66, medium correlation
+
+## Boxplot of total biomass over time
+max_exotic_time_box <- biomass %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = total)) +
+  geom_boxplot(width = .5) +
+  geom_jitter(aes(color = Plot), width = .1) +
+  labs(title = "Total Biomass of Exotics", x = "Time Since Restoration (years)", y = "Biomass (g)", caption = "More variation as time increases")
+#max_exotic_time_box
+
+## Kruskal-Wallis
+
+### Check for normality
+biomass_hist <- ggplot(biomass) +
+  geom_histogram(aes(x = total))
+#biomass_hist
+####not normal
+
+## Kruskal-Wallis test
+biomass_time_kw <- kruskal.test(total ~ Time_Since, data = biomass)
+#biomass_time_kw
+###p = .5672, median total exotic biomass not different over time
+
+```
+
+
+# 1d. Total percent cover of natives over time since restoration
+
+Results: Increase in total native percent cover over time (but peak in years 3-5), driven by WT1, MS, & CS.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1d. Compare total % cover of natives (sum of max % cover of each species) over time since restoration
+
+
+## Create new data frame with creation year of each pool
+creation_year_df <- data.frame(Plot = c("PH1", "TP", "RT", "MS", "WT1", "WT2", "CS"), Creation_Year = c("2010", "2012", "2012", "2015", "2014", "2014", "2013"))
+
+## Add time since restoration column
+np_percent_cover_time_cover_native <- np_percent_cover %>%
+  filter(Native_Status == "N", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  na.omit() %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year, Plot) %>% 
+  summarize(total = sum(max)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year)
+
+  
+## Scatter plot of total % cover vs. time since
+max_native_time_scatter <- np_percent_cover_time_cover_native %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = total, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(x = Time_Since, group = NULL), se = TRUE, size = .5) +
+  labs(title = "Total Percent Cover of Natives", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "More variation in years 3-5; WT2, PH1, TP, RT increased") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,200))
+max_native_time_scatter
+
+### Calculate lm(), R^2 of native cover over time
+time_native_cover_lm <- lm(np_percent_cover_time_cover_native$total ~ np_percent_cover_time_cover_native$Time_Since)
+# summary(time_native_cover_lm)
+#total = -7.004(Time_Since) + 141.589, R^2 = .082, p = .3213
+
+### Check diagnostic graphs
+# plot(time_native_cover_lm)
+#diagnostic graphs look pretty good
+
+### Calculate Pearson's r
+# cor.test(np_percent_cover_time_cover_native$Time_Since, np_percent_cover_time_cover_native$total)
+#r = -.29, weak correlation
+
+## Kruskal-Wallis
+
+### Check for normality
+native_cover_hist <- ggplot(np_percent_cover_time_cover_native) +
+  geom_histogram(aes(x = total))
+#native_cover_hist
+####not normal
+
+## Kruskal-Wallis test
+native_cover_time_kw <- kruskal.test(total ~ Time_Since, data = np_percent_cover_time_cover_native)
+#native_cover_time_kw
+###p = .2509, median total native % cover not different over time
+
+
+## Boxplot of total % cover vs. time since
+max_native_time_box <- np_percent_cover_time_cover_native %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = total)) +
+  geom_boxplot(width = .5) +
+  geom_jitter(aes(color = Plot), width = .1) +
+  labs(title = "Total Percent Cover of Native", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "More variation in years 3-5; WT2, PH1, TP, RT increased")
+#max_native_time_box
+
+```
+
+# 1e. Species richness of natives over time since restoration
+
+Results: Decrease in total native species richness over time.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1e. Compare species richness (during max percent cover) of native species over time
+
+## Add time since restoration column
+np_richness_time_native <- np_percent_cover %>%
+  filter(Native_Status == "N", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year, Plot) %>% 
+  summarize(richness = length(max)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year)
+
+## Scatter plot of species richness vs. time since
+native_richness_time_scatter <- np_richness_time_native %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = richness, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(x = Time_Since, group = NULL), se = TRUE, size = .5) +
+  labs(title = "Species Richness of Natives", x = "Time Since Restoration (years)", y = "Species Richness", caption = "High variation; all decreased") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,30))
+native_richness_time_scatter
+
+### Calculate lm(), R^2 of native richness over time
+time_native_richness_lm <- lm(np_richness_time_native$richness ~ np_richness_time_native$Time_Since)
+# summary(time_native_richness_lm)
+#richness = -.38(Time_Since) +21.34, R^2 = .0293, p = .5585
+
+### Check diagnostic graphs
+# plot(time_native_richness_lm)
+#diagnostic graphs look pretty good
+
+### Calculate Pearson's r
+# cor.test(np_richness_time_native$Time_Since, np_richness_time_native$richness)
+#r = -.17, weak correlation
+
+## Kruskal-Wallis
+
+### Check for normality
+native_richness_hist <- ggplot(np_richness_time_native) +
+  geom_histogram(aes(x = richness))
+#native_richness_hist
+####not normal
+
+## Kruskal-Wallis test
+native_richness_time_kw <- kruskal.test(richness ~ Time_Since, data = np_richness_time_native)
+#native_richness_time_kw
+###p = .8629, median native richness not different over time
+
+
+```
+
+
+# 2. What's driving increase in exotics and decrease in native?
+
+Hypothesis: One exotic is becoming dominant (POMO)
+
+- because of some abiotic site conditions?
+
+# 2a. Max percent of exotics over time, max percent of natives over time, by species
+
+Results: Exotic increases largely driven by grasses (UNK GRASS, FEMY, POMO)
+
+- RT: UNK GRASS problem (probably POMO or PHAQ) -- had difficulties maintaining site due to ongoing construction
+- WT1: exotic species richness increased (both grasses and non-grasses) -- solely rainfed, steeper & deeper than planned
+- WT2: FEMY & POMO problem -- receives urban runoff, steeper & deeper than planned
+- PH1: UNK GRASS problem -- not inoculated
+
+Preliminary conclusion: Pools surrounded by houses receive less exotic seed input
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 2a. Max percent of exotics over time (by species), max percent of natives over time (by species) of problem pools: RT, WT1, WT2, PH1
+
+## RT
+## exotic increase largely driven by UNK GRASS; median 2017 % covers of native spp is greater than 2018
+
+### Max percent covers of exotics only, 2017 vs 2018
+rt_max_exotic <- np_percent_cover %>% 
+  filter(Plot == "RT") %>% 
+  filter(Native_Status == "E") %>% 
+  filter(Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(
+    max = max(percent_cover)
+    ) %>% 
+  spread(Year, max) %>% 
+  gather(Year, max, 2:3)
+rt_max_exotic$max[is.na(rt_max_exotic$max)] <- 0
+
+### Plot max percent covers of exotics only, 2017 vs 2018
+rt_max_exotic_col <- rt_max_exotic %>% 
+  ggplot(aes(x = Species_Full_Name, y = max)) +
+  geom_col(aes(fill = as.factor(Year)), position = "dodge") +
+  labs(title = "RT: Percent Cover of Exotics", x = "Species", y = "Percent Cover", caption = "BRHO, ERCI, FEMY, FEPE, HYGL, LYAR, MEPO, PAIN, SOAS, SOOL, SPSP, & esp UNK GRASS increased") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values = c("chartreuse4", "chartreuse3"), name = "Year") +
+  scale_y_continuous(expand = c(0,0))
+rt_max_exotic_col
+
+
+### Wilcoxon signed-rank
+#### Check for normality
+rt_max_exotic_hist <- rt_max_exotic %>% 
+  ggplot() +
+  geom_histogram(aes(x = max))
+#rt_max_exotic_hist
+#####not normal
+#### Wilcoxon signed-rank test
+rt_max_exotic_wsr <- rt_max_exotic %>% 
+  spread(Year, max) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(rt_max_exotic_wsr$seventeen, rt_max_exotic_wsr$eighteen, alternative = "less", paired = TRUE)
+#####p = .3627, median 2017 % covers of exotic spp is not less than 2018
+
+
+### Max percent covers of natives only, 2017 vs 2018
+rt_max_native <- np_percent_cover %>% 
+  filter(Plot == "RT") %>% 
+  filter(Native_Status == "N") %>% 
+  filter(Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(
+    max = max(percent_cover)
+    ) %>% 
+  spread(Year, max) %>% 
+  gather(Year, max, 2:3)
+rt_max_native$max[is.na(rt_max_native$max)] <- 0
+
+### Plot max percent covers of natives only, 2017 vs 2018
+rt_max_native_col <- ggplot(rt_max_native, aes(x = Species_Full_Name, y = max)) +
+  geom_col(aes(fill = as.factor(Year)), position = "dodge") +
+  labs(title = "RT: Percent Cover of Natives", x = "Species", y = "Percent Cover", caption = "Only JUBU, MALE, STPU, ZEMU increased; DISP, ELMA decreased a lot") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values = c("chartreuse4", "chartreuse3"), name = "Year") +
+  scale_y_continuous(expand = c(0,0))
+rt_max_native_col
+
+### Wilcoxon signed-rank
+#### Check for normality
+rt_max_native_hist <- rt_max_native %>% 
+  ggplot() +
+  geom_histogram(aes(x = max))
+#rt_max_native_hist
+#####not normal
+#### Wilcoxon signed-rank test
+rt_max_native_wsr <- rt_max_native %>% 
+  spread(Year, max) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(rt_max_native_wsr$seventeen, rt_max_native_wsr$eighteen, alternative = "greater", paired = TRUE)
+#####p = .016, median 2017 % covers of native spp is greater than 2018
+
+
+### Total native vs exotic over time
+rt_n_vs_e <- np_percent_cover %>% 
+  filter(Plot == "RT") %>% 
+  group_by(Species_Full_Name, Native_Status, date) %>% 
+  summarize(
+        max_percentage = max(percent_cover)
+  ) %>% 
+  group_by(Native_Status, date) %>% 
+  summarize(
+    total = sum(max_percentage)
+  ) %>% 
+  na.omit() %>% 
+  ggplot(aes(x = factor(date), y = total)) +
+  geom_line(aes(color = Native_Status, group = Native_Status)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "RT: Percent Cover", x = "Date", y = "Percent Cover")
+#rt_n_vs_e
+
+## WT1
+## exotic increase in species richness; median 2017 % covers of exotic spp is less than 2018
+
+### Max percent covers of exotics only, 2017 vs 2018
+wt1_max_exotic <- np_percent_cover %>% 
+  filter(Plot == "WT1") %>% 
+  filter(Native_Status == "E") %>% 
+  filter(Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(
+    max = max(percent_cover)
+    ) %>% 
+  spread(Year, max) %>% 
+  gather(Year, max, 2:3)
+wt1_max_exotic$max[is.na(wt1_max_exotic$max)] <- 0
+
+### Plot max percent covers of exotics only, 2017 vs 2018
+wt1_max_exotic_col <- ggplot(wt1_max_exotic, aes(x = Species_Full_Name, y = max)) +
+  geom_col(aes(fill = as.factor(Year)), position = "dodge") +
+  labs(title = "WT1: Percent Cover of Exotics", x = "Species", y = "Percent Cover", caption = "BRNI, BRHO, BRMA, FEMY, GEDI, HEEC, HYGL, LYAR, MAPA, MEPO, PAIN, POAN, RASA, SOOL, TRIHI increased (increase in exotic species richness)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values = c("chartreuse4", "chartreuse3"), name = "Year") +
+  scale_y_continuous(expand = c(0,0))
+wt1_max_exotic_col
+
+### Wilcoxon signed-rank
+#### Check for normality
+wt1_max_exotic_hist <- wt1_max_exotic %>% 
+  ggplot() +
+  geom_histogram(aes(x = max))
+#wt1_max_exotic_hist
+#####not normal
+#### Wilcoxon signed-rank test
+wt1_max_exotic_wsr <- wt1_max_exotic %>% 
+  spread(Year, max) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(wt1_max_exotic_wsr$seventeen, wt1_max_exotic_wsr$eighteen, alternative = "less", paired = TRUE)
+#####p = .10, median 2017 % covers of exotic spp is not less than 2018
+
+
+### Max percent covers of natives only, 2017 vs 2018
+wt1_max_native <- np_percent_cover %>% 
+  filter(Plot == "WT1") %>% 
+  filter(Native_Status == "N") %>% 
+  filter(Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(
+    max = max(percent_cover)
+    ) %>% 
+  spread(Year, max) %>% 
+  gather(Year, max, 2:3)
+wt1_max_native$max[is.na(wt1_max_native$max)] <- 0
+
+### Plot max percent covers of natives only, 2017 vs 2018
+wt1_max_native_col <- ggplot(wt1_max_native, aes(x = Species_Full_Name, y = max)) +
+  geom_col(aes(fill = as.factor(Year)), position = "dodge") +
+  labs(title = "WT1: Percent Cover of Natives", x = "Species", y = "Percent Cover", caption = "CAPR, EPBR, ERSP, HEGR, HOBR, JUPA, JUPH, SCPU, SIBE, STPU, VELA, & esp CEPA increased") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values = c("chartreuse4", "chartreuse3"), name = "Year") +
+  scale_y_continuous(expand = c(0,0))
+wt1_max_native_col
+
+### Wilcoxon signed-rank
+#### Check for normality
+wt1_max_native_hist <- wt1_max_native %>% 
+  ggplot() +
+  geom_histogram(aes(x = max))
+#wt1_max_native_hist
+#####not normal
+#### Wilcoxon signed-rank test
+wt1_max_native_wsr <- wt1_max_native %>% 
+  spread(Year, max) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(wt1_max_native_wsr$seventeen, wt1_max_native_wsr$eighteen, alternative = "greater", paired = TRUE)
+#####p = .705, median 2017 % covers of native spp is not greater than 2018
+
+## WT2
+## exotic increase largely driven by FEMY & POMO
+
+### Max percent covers of exotics only, 2017 vs 2018
+wt2_max_exotic <- np_percent_cover %>% 
+  filter(Plot == "WT2") %>% 
+  filter(Native_Status == "E") %>% 
+  filter(Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(
+    max = max(percent_cover)
+    ) %>% 
+  spread(Year, max) %>% 
+  gather(Year, max, 2:3)
+wt2_max_exotic$max[is.na(wt2_max_exotic$max)] <- 0
+
+### Plot max percent covers of exotics only, 2017 vs 2018
+wt2_max_exotic_col <- ggplot(wt2_max_exotic, aes(x = Species_Full_Name, y = max)) +
+  geom_col(aes(fill = as.factor(Year)), position = "dodge") +
+  labs(title = "WT2: Percent Cover of Exotics", x = "Species", y = "Percent Cover", caption = "ATSE, BRDI, FOVU, HEEC, HYGL, LASE, MEPO, POAV, & esp FEMY & POMO increased") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values = c("chartreuse4", "chartreuse3"), name = "Year") +
+  scale_y_continuous(expand = c(0,0))
+wt2_max_exotic_col
+
+### Wilcoxon signed-rank
+#### Check for normality
+wt2_max_exotic_hist <- wt2_max_exotic %>% 
+  ggplot() +
+  geom_histogram(aes(x = max))
+#wt2_max_exotic_hist
+#####not normal
+#### Wilcoxon signed-rank test
+wt2_max_exotic_wsr <- wt2_max_exotic %>% 
+  spread(Year, max) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(wt2_max_exotic_wsr$seventeen, wt2_max_exotic_wsr$eighteen, alternative = "less", paired = TRUE)
+#####p = .22, median 2017 % covers of exotic spp is not less than 2018
+
+
+### Max percent covers of natives only, 2017 vs 2018
+wt2_max_native <- np_percent_cover %>% 
+  filter(Plot == "WT2") %>% 
+  filter(Native_Status == "N") %>% 
+  filter(Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(
+    max = max(percent_cover)
+    ) %>% 
+  spread(Year, max) %>% 
+  gather(Year, max, 2:3)
+wt2_max_native$max[is.na(wt2_max_native$max)] <- 0
+
+### Plot max percent covers of exotics only, 2017 vs 2018
+wt2_max_native_col <- ggplot(wt2_max_native, aes(x = Species_Full_Name, y = max)) +
+  geom_col(aes(fill = as.factor(Year)), position = "dodge") +
+  labs(title = "WT2: Percent Cover of Natives", x = "Species", y = "Percent Cover", caption = "BOMA, BRCA, CYER, EPBR, ERVA, HEGR, JUPA, LUSU, PSBR, RUSA, STPU, SYSU increased") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values = c("chartreuse4", "chartreuse3"), name = "Year") +
+  scale_y_continuous(expand = c(0,0))
+wt2_max_native_col
+
+### Wilcoxon signed-rank
+#### Check for normality
+wt2_max_native_hist <- wt2_max_native %>% 
+  ggplot() +
+  geom_histogram(aes(x = max))
+#wt2_max_native_hist
+#####not normal
+#### Wilcoxon signed-rank test
+wt1_max_exotic_wsr <- wt2_max_native %>% 
+  spread(Year, max) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(wt1_max_exotic_wsr$seventeen, wt1_max_exotic_wsr$eighteen, alternative = "greater", paired = TRUE)
+#####p = .19, median 2017 % covers of native spp is not greater than 2018
+
+## PH1
+## exotic increase largely driven by UNK GRASS; median 2017 % covers of exotic spp is greater than 2018
+
+### Max percent covers of exotics only, 2017 vs 2018
+ph1_max_exotic <- np_percent_cover %>% 
+  filter(Plot == "PH1") %>% 
+  filter(Native_Status == "E") %>% 
+  filter(Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(
+    max = max(percent_cover)
+    ) %>% 
+  spread(Year, max) %>% 
+  gather(Year, max, 2:3)
+ph1_max_exotic$max[is.na(ph1_max_exotic$max)] <- 0
+
+### Plot max percent covers of exotics only, 2017 vs 2018
+ph1_max_exotic_col <- ggplot(ph1_max_exotic, aes(x = Species_Full_Name, y = max)) +
+  geom_col(aes(fill = as.factor(Year)), position = "dodge") +
+  labs(title = "PH1: Percent Cover of Exotics", x = "Species", y = "Percent Cover", caption = "CAPY, CEDI, HYGL, MEPO, VISA, & esp UNK GRASS increased") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values = c("chartreuse4", "chartreuse3"), name = "Year") +
+  scale_y_continuous(expand = c(0,0))
+ph1_max_exotic_col
+
+### Wilcoxon signed-rank
+#### Check for normality
+ph1_max_exotic_hist <- ph1_max_exotic %>% 
+  ggplot() +
+  geom_histogram(aes(x = max))
+#wt1_max_exotic_hist
+#####not normal
+#### Wilcoxon signed-rank test
+ph1_max_exotic_wsr <- ph1_max_exotic %>% 
+  spread(Year, max) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(ph1_max_exotic_wsr$seventeen, ph1_max_exotic_wsr$eighteen, alternative = "less", paired = TRUE)
+#####p = .55, median 2017 % covers of exotic spp is not less than 2018
+
+
+### Max percent covers of natives only, 2017 vs 2018
+ph1_max_native <- np_percent_cover %>% 
+  filter(Plot == "PH1") %>% 
+  filter(Native_Status == "N") %>% 
+  filter(Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(
+    max = max(percent_cover)
+    ) %>% 
+  spread(Year, max) %>% 
+  gather(Year, max, 2:3)
+ph1_max_native$max[is.na(ph1_max_native$max)] <- 0
+
+### Plot max percent covers of exotics only, 2017 vs 2018
+ph1_max_native_col <- ggplot(ph1_max_native, aes(x = Species_Full_Name, y = max)) +
+  geom_col(aes(fill = as.factor(Year)), position = "dodge") +
+  labs(title = "PH1: Percent Cover of Natives", x = "Species", y = "Percent Cover", caption = "Only CAPR, EPBR, SYSU increased") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values = c("chartreuse4", "chartreuse3"), name = "Year") +
+  scale_y_continuous(expand = c(0,0))
+ph1_max_native_col
+
+### Wilcoxon signed-rank
+#### Check for normality
+ph1_max_native_hist <- ph1_max_native %>% 
+  ggplot() +
+  geom_histogram(aes(x = max))
+#ph1_max_native_hist
+#####not normal
+#### Wilcoxon signed-rank test
+ph1_max_native_wsr <- ph1_max_native %>% 
+  spread(Year, max) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(ph1_max_native_wsr$seventeen, ph1_max_native_wsr$eighteen, alternative = "greater", paired = TRUE)
+#####p = .011, median 2017 % covers of exotic spp is greater than 2018
+
+```
+
+
+#2b. Exotic biomass for each pool, by zone
+
+Results:
+
+
+#2c. Percent cover vs. depth of pool
+
+Results: Deeper pools (WT2, TP) have less total exotic percent cover.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 2c. Percent cover vs. depth of pool
+
+## Make data frame of depths of pools
+depth_df <- data.frame(depth = c("12", "13", "13", "12", "17.75", "13", "15.5", "12", "13", "13", "12", "17.75", "13", "15.5"), Plot = c("CS", "MS", "PH1", "RT", "TP", "WT1", "WT2", "CS", "MS", "PH1", "RT", "TP", "WT1", "WT2"))
+
+## Exotic percent cover (sum of max % cover of each species) vs. depth of pool
+
+### Join depth_df to exotic species % cover data, convert depth to continuous numeric Depth column
+np_exotic_percent_cover_depth <- np_percent_cover %>%
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year, Plot) %>% 
+  summarize(total = sum(max)) %>% 
+  full_join(depth_df) %>% 
+  mutate(Depth = as.numeric(as.character(depth)))
+
+### Scatter plot of exotic % cover vs. depth
+depth_exotic_scatter <- np_exotic_percent_cover_depth %>% 
+  ggplot(aes(x = Depth, y = total, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(x = Depth, group = NULL), size = .2) +
+  labs(title = "Total Percent Cover of Exotics", x = "Depth of Pool (in)", y = "Percent Cover", caption = "Deeper pools have less exotic cover") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,200))
+depth_exotic_scatter
+
+### Calculate lm(), R^2 of exotic % cover vs. depth
+depth_exotic_lm <- lm(np_exotic_percent_cover_depth$total ~ np_exotic_percent_cover_depth$Depth)
+# summary(depth_exotic_lm)
+#total = -9.074(Depth) + 182.202, R^2 = .1243, p = .066
+
+### Check diagnostic graphs
+# plot(depth_exotic_lm)
+#diagnostic graphs look pretty good
+
+### Calculate Pearson's r
+# cor.test(np_exotic_percent_cover_depth$Depth, np_exotic_percent_cover_depth$total)
+#r = -.35, weak-medium correlation
+
+### Kruskal-Wallis
+exotic_cover_depth_kw <- kruskal.test(total ~ Depth, data = np_exotic_percent_cover_depth)
+#exotic_cover_depth_kw
+###p = .5705, median total exotic % cover not different over depth
+
+## Exotic species richness (during max % cover) vs. depth of pool
+
+### Scatter plot of exotic species richess vs. depth
+depth_exotic_richness_scatter <- np_percent_cover %>%
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year, Plot) %>% 
+  summarize(richness = length(max)) %>% 
+  full_join(depth_df) %>% 
+  ggplot(aes(x = depth, y = richness, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(x = as.numeric(depth), group = NULL), se = TRUE, size = .5) +
+  labs(title = "Species Richness of Exotics", x = "Depth of Pool (in)", y = "Species Richness", caption = "High variation; decrease in species richness as depth increases")
+#depth_exotic_richness_scatter
+
+## Native percent cover (sum of max % cover of each species) vs. depth of pool
+
+### Join depth_df to native species % cover data, convert depth into continuous numeric Depth column
+np_native_percent_cover_depth <- np_percent_cover %>%
+  filter(Native_Status == "N", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year, Plot) %>% 
+  summarize(total = sum(max)) %>% 
+  na.omit() %>% 
+  full_join(depth_df) %>% 
+  mutate(Depth = as.numeric(as.character(depth)))
+  
+### Scatter plot of native % cover vs. depth
+depth_native_scatter <- np_native_percent_cover_depth %>% 
+  ggplot(aes(x = Depth, y = total, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(x = Depth, group = NULL), size = .2) +
+  labs(title = "Total Percent Cover of Natives", x = "Depth of Pool (in)", y = "Percent Cover", caption = "High variation; Deeper pools have less native cover") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,700))
+depth_native_scatter
+
+### Calculate lm(), R^2 of native % cover vs. depth
+depth_native_lm <- lm(np_native_percent_cover_depth$total ~ np_native_percent_cover_depth$Depth)
+# summary(depth_native_lm)
+#total = -2.95(Depth) + 499.73, R^2 = .0026, p = .8038
+
+### Check diagnostic graphs
+# plot(depth_native_lm)
+#diagnostic graphs look pretty good
+
+### Calculate Pearson's r
+# cor.test(np_native_percent_cover_depth$Depth, np_native_percent_cover_depth$total)
+#r = -.051, weak correlation
+
+### Kruskal-Wallis
+native_cover_depth_kw <- kruskal.test(total ~ Depth, data = np_native_percent_cover_depth)
+#native_cover_depth_kw
+###p = .1615, median total native % cover not different over depth
+
+## Exotic species richness (during max % cover) vs. depth of pool
+
+### Scatter plot of exotic species richess vs. depth
+depth_native_richness_scatter <- np_percent_cover %>%
+  filter(Native_Status == "N", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year, Plot) %>% 
+  summarize(richness = length(max)) %>% 
+  full_join(depth_df) %>% 
+  ggplot(aes(x = depth, y = richness, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(x = as.numeric(depth), group = NULL), se = TRUE, size = .5) +
+  labs(title = "Species Richness of Natives", x = "Depth of Pool (in)", y = "Species Richness", caption = "High variation; decrease in species richness as depth increases")
+#depth_exotic_richness_scatter
+
+```
+
+
+# 3. How does seed bank composition change over time?
+
+Hypothesis: Diversity of natives has increased over time, while diversity of exotics has decreased over time.
+
+# 3a. Seed Bank Species Abundance
+
+Results: No obvious trends.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 3a. Compare 2016 vs. 2018 seed bank counts, by species
+
+## Convert Species_Full_Name to a code
+code_metadata <- metadata %>% 
+  add_column(Species_Code = 1:128)
+
+## Calculate total abundance of each species per Replicate, join to metadata
+np_seedbank_2018 <- np_2018_seed_bank_master %>% 
+  group_by(Plot, Replicate, Species) %>% 
+  summarize(Count = sum(Count)) %>% 
+  add_column(Year = 2018) %>% 
+  full_join(code_metadata)
+
+## Join 2016 and 2018 seed bank data
+np_seed_bank <- seedbank_2016 %>% 
+  add_column(Year = 2016) %>% 
+  full_join(np_seedbank_2018) %>% 
+  group_by(Plot, Species_Full_Name, Native_Status, Year) %>% 
+  summarize(total = sum(Count)) %>% 
+  na.omit()
+
+## Join np_seedbank_2018 with seedbank_2016 and code_metadata, calculate total abundance of each species per plot in each year, remove NAs, then retain only exotics and 2018 data
+np_exotic_seed_bank_2018 <- seedbank_2016 %>% 
+  add_column(Year = 2016) %>% 
+  full_join(np_seedbank_2018) %>% 
+  group_by(Plot, Species_Full_Name, Species_Code, Native_Status, Year) %>% 
+  summarize(total = sum(Count)) %>% 
+  na.omit() %>% 
+  filter(Native_Status == "E") %>% 
+  filter(Year == "2018")
+
+## Join up seedbank_2016 with code_metadata, then retain only exotics and 2016 data
+np_exotic_seed_bank_2016 <- seedbank_2016 %>% 
+  add_column(Year = 2016) %>% 
+  full_join(code_metadata) %>%
+  filter(Native_Status == "E") %>% 
+  filter(Year == "2016")
+
+## Column graph of exotic species, 2016 vs. 2018
+exotic_seed_bank_col <- np_seed_bank %>% 
+  filter(Native_Status == "E") %>% 
+  ggplot(aes(x = Species_Full_Name, y = total, group = Year)) +
+  geom_col(aes(fill = as.factor(Year)), position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Exotic Species in Seed Bank", x = "Species", y = "Count", caption = "FEPE decreased, LYHY & POMO increased") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values = c("darkgreen", "chartreuse3"), name = "Year") +
+  scale_y_continuous(expand = c(0,0))
+exotic_seed_bank_col
+
+### Wilcoxon signed-rank
+np_seed_bank_zeros <- np_seed_bank %>% 
+  spread(Year, total) %>% 
+  gather(Year, total, 4:5)
+np_seed_bank_zeros$Year <- as.numeric(np_seed_bank_zeros$Year)
+np_seed_bank_zeros$total[is.na(np_seed_bank_zeros$total)] <- 0
+
+#### Check for normality
+np_seed_bank_hist <- np_seed_bank_zeros %>% 
+  ggplot() +
+  geom_histogram(aes(x = total))
+#np_seed_bank_hist
+#####not normal
+#### Wilcoxon signed-rank test
+np_seed_bank_exotic_wsr <- np_seed_bank_zeros %>% 
+  filter(Native_Status == "E") %>% 
+  spread(Year, total) %>% 
+  rename(sixteen = "2016") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(np_seed_bank_exotic_wsr$sixteen, np_seed_bank_exotic_wsr$eighteen, alternative = "less", paired = TRUE)
+#####p = .42, median 2016 counts of exotic spp is not less than 2018
+
+## Column graph of exotic species stacked by Plot
+exotic_seed_bank_stack_col <- ggplot() +
+  geom_col(data = np_exotic_seed_bank_2016, mapping = aes(x = Species_Code, y = Count, fill = as.factor(Plot)), color = "salmon", lwd = .3) +
+  geom_col(data = np_exotic_seed_bank_2018, mapping = aes(x = as.numeric(Species_Code) + .9, y = total, fill = as.factor(Plot)), color = "cyan", lwd = .3) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Exotic Species in Seed Bank, by Plot", x = "Species", y = "Count", caption = "FEPE decreased, LYHY & POMO & SPSP increased") +
+  geom_text(data = np_exotic_seed_bank_2018, aes(x = Species_Code, y = total, label = Species_Full_Name), angle = 90, nudge_x = 1, nudge_y = 100, alpha = .1) +
+  geom_text(data = np_exotic_seed_bank_2016, aes(x = Species_Code, y = Count, label = Species_Full_Name), angle = 90, nudge_x = 1, nudge_y = 100, alpha = .1)
+#exotic_seed_bank_stack_col
+
+## Join np_seedbank_2018 with seedbank_2016 and code_metadata, calculate total abundance of each species per plot in each year, remove NAs, then retain only natives and 2018 data
+np_native_seed_bank_2018 <- seedbank_2016 %>% 
+  add_column(Year = 2016) %>% 
+  full_join(np_seedbank_2018) %>% 
+  group_by(Plot, Species_Full_Name, Species_Code, Native_Status, Year) %>% 
+  summarize(total = sum(Count)) %>% 
+  na.omit() %>% 
+  filter(Native_Status == "N") %>% 
+  filter(Year == "2018") %>% 
+  filter(Species_Full_Name != "Juncus bufonius")
+
+## Join up seedbank_2016 with code_metadata, then retain only natives and 2016 data
+np_native_seed_bank_2016 <- seedbank_2016 %>% 
+  add_column(Year = 2016) %>% 
+  full_join(code_metadata) %>%
+  filter(Native_Status == "N") %>% 
+  filter(Year == "2016") %>% 
+  filter(Species_Full_Name != "Juncus bufonius")
+
+## Column graph of native species, 2016 vs. 2018
+native_seed_bank_col <- np_seed_bank %>% 
+  filter(Native_Status == "N") %>% 
+  filter(Species_Full_Name != "Juncus bufonius") %>% 
+  ggplot(aes(x = Species_Full_Name, y = total, group = Year)) +
+  geom_col(aes(fill = as.factor(Year)), position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Native Species in Seed Bank", x = "Species", y = "Count", caption = "JUBU, LACO, SYSU increased") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values = c("darkgreen", "chartreuse3"), name = "Year") +
+  scale_y_continuous(expand = c(0,0))
+native_seed_bank_col
+
+### Wilcoxon signed-rank test
+np_seed_bank_native_wsr <- np_seed_bank_zeros %>% 
+  filter(Native_Status == "N") %>% 
+  spread(Year, total) %>% 
+  rename(sixteen = "2016") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(np_seed_bank_native_wsr$sixteen, np_seed_bank_native_wsr$eighteen, alternative = "greater", paired = TRUE)
+#####p = .09937, median 2016 counts of native spp is not greater than 2018
+
+
+## Column graph of native species stacked by Plot
+native_seed_bank_stack_col <- ggplot() +
+  geom_col(data = np_native_seed_bank_2016, mapping = aes(x = Species_Code, y = Count, fill = as.factor(Plot)), color = "salmon", lwd = .3) +
+  geom_col(data = np_native_seed_bank_2018, mapping = aes(x = as.numeric(Species_Code) + .9, y = total, fill = as.factor(Plot)), color = "cyan", lwd = .3) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Native Species in Seed Bank, by Plot", x = "Species", y = "Count", caption = "JUBU, LACO, SYSU increased") +
+  geom_text(data = np_native_seed_bank_2018, aes(x = Species_Code, y = total, label = Species_Full_Name), angle = 90, nudge_x = 1, nudge_y = 100, alpha = .1) +
+  geom_text(data = np_native_seed_bank_2016, aes(x = Species_Code, y = Count, label = Species_Full_Name), angle = 90, nudge_x = 1, nudge_y = 100, alpha = .1)
+#native_seed_bank_stack_col
+
+
+
+### Another version of stacked and dodged column graphs of seed bank species richness, 2016 vs. 2018
+#np_seed_bank %>% 
+# ggplot(aes(as.factor(Year), total, fill = Plot)) +
+#  geom_col() +
+#  theme(axis.text.x = element_text(angle = 90),
+#        strip.text.x = element_text(angle = 90)) +
+#  facet_grid(~ as.factor(Species_Full_Name))
+
+
+```
+
+
+# 3b. Seed Bank Species Richness
+
+Results: Exotic species richness decreases over time.  Native species richness also decreases over time.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+#3b. Compare seed bank exotic species richness and native species richness over time, by pool
+
+## Calculate exotic species richness in each pool, in each year
+np_seed_bank_exotic_time <- np_seed_bank %>%
+  group_by(Native_Status, Plot, Year) %>% 
+  summarize(richness = length(total)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  filter(Native_Status == "E")
+
+## Scatter plot of seed bank exotic species richness over time
+np_seed_bank_time_exotic_scatter <- np_seed_bank_exotic_time %>% 
+  ggplot(aes(x = Time_Since, y = richness, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(group = NULL), size = .5) +
+  labs(title = "Seed Bank Exotic Species Richness", x = "Time Since Restoration (years)", y = "Species Richness", caption = "All pools decreased in exotic species richness") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,25))
+np_seed_bank_time_exotic_scatter
+
+### Calculate lm(), R^2 of exotic richness over time
+np_seed_bank_time_exotic_richness_lm <- lm(np_seed_bank_exotic_time$richness ~ np_seed_bank_exotic_time$Time_Since)
+# summary(np_seed_bank_time_exotic_richness_lm)
+#richness = -1.695(Time_Since) + 19.949, R^2 = .2561, p = .06481
+
+### Check diagnostic graphs
+# plot(np_seed_bank_time_exotic_richness_lm)
+#diagnostic graphs look pretty good
+
+### Calculate Pearson's r
+# cor.test(np_seed_bank_exotic_time$Time_Since, np_seed_bank_exotic_time$richness)
+#r = -.51, medium correlation
+
+## Calculate native species richness in each pool, in each year
+np_seed_bank_native_time <- np_seed_bank %>%
+  group_by(Native_Status, Plot, Year) %>% 
+  summarize(richness = length(total)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  filter(Native_Status == "N")
+
+## Scatter plot of seed bank native species richness over time
+np_seed_bank_time_native_scatter <- np_seed_bank_native_time %>% 
+  ggplot(aes(x = Time_Since, y = richness, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(group = NULL), size = .5) +
+  labs(title = "Seed Bank Native Species Richness", x = "Time Since Restoration (years)", y = "Species Richness", caption = "All pools decreased in native species richness") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,25))
+np_seed_bank_time_native_scatter
+
+### Calculate lm(), R^2 of exotic richness over time
+np_seed_bank_time_native_richness_lm <- lm(np_seed_bank_native_time$richness ~ np_seed_bank_native_time$Time_Since)
+# summary(np_seed_bank_time_native_richness_lm)
+#richness = -2.305(Time_Since) +21.551 , R^2 = .3532, p = .02501
+
+### Check diagnostic graphs
+# plot(np_seed_bank_time_native_richness_lm)
+#diagnostic graphs look pretty good
+
+### Calculate Pearson's r
+# cor.test(np_seed_bank_native_time$Time_Since, np_seed_bank_native_time$richness)
+#r = -.59, medium correlation
+
+```
+
+# 3c. Compare seed bank species to percent cover species
+
+Results: Exotic species richness decreased from 2016 seed bank.  Native species richness decreased from 2016 seed bank.  RT and WT1 especially different; differences in seed bank correlate with change in species composition over time.
+
+- MS: 2017 and 2018 native species composition is different from seed bank
+- PH1: 2018 exotic species composition is different from seed bank
+- RT: species compositions are different from seed bank
+- TP: 2017 native species composition is different from seed bank
+- WT1: 2018 exotic and native species compositions are different from seed bank
+- WT2: exotic species compositions are different from seed bank
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 3c. Compare 2016 seed bank species to 2017 anad 2018 percent cover species, by pool
+
+
+## Aggregate 2016 seed bank and 2017/2018 percent cover data
+np_seed_bank_cover <- np_percent_cover %>%
+  filter(Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot, Native_Status) %>% 
+  summarize(total = max(percent_cover)) %>% 
+  full_join(filter(np_seed_bank_zeros, Year == "2016")) %>% 
+  na.omit()
+
+## Calculate exotic species richness
+np_exotic_seed_bank_richness <- np_seed_bank_cover %>% 
+  filter(Native_Status == "E") %>% 
+  group_by(Year, Plot, Native_Status) %>% 
+  summarize(richness = length(total))
+
+## Plot exotic richness vs. time
+np_exotic_seed_bank_richness_scatter <- np_exotic_seed_bank_richness %>% 
+  ggplot(aes(x = Year, y = richness, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(x = Year, group = NULL), size = .2) +
+  labs(title = "Exotic Species Richness", x = "Year", y = "Percent Cover", caption = "All pools decreased from 2016 seed bank to 2017") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,25)) +
+  scale_x_continuous(labels = c("2016", " ", "2017", " ", "2018"))
+np_exotic_seed_bank_richness_scatter
+
+## Plot columns of exotic richness, 2016 seed bank vs. 2017
+np_exotic_seed_bank_richness_col <- np_exotic_seed_bank_richness %>% 
+  ggplot(aes(x = Plot, y = richness)) +
+  geom_col(aes(fill = as.factor(Year)), position = "dodge") +
+  labs(title = "Exotic Species Richness", x = "Vernal Pool", y = "Species Richness", caption = "All pools decreased from 2016 seed bank to 2017; \n MS decreased in 2018, but RT & WT1 increased a lot in 2018") +
+  theme_classic() +
+  scale_fill_manual(values = c("darkgreen", "chartreuse3", "chartreuse2"), name = "Year", labels = c("2016 seed bank", "2017 monitoring", "2018 monitoring")) +
+  scale_y_continuous(expand = c(0,0)) +
+  scale_x_discrete(limits = c("RT", "PH1", "MS", "TP", "WT2", "CS", "WT1"))
+np_exotic_seed_bank_richness_col
+
+## Plot correlation of exotic richness, 2016 seed bank vs. 2017
+np_exotic_seed_bank_richness_scatter <- np_exotic_seed_bank_richness %>% 
+  spread(Year, richness) %>% 
+  rename(sixteen = "2016") %>% 
+  rename(seventeen = "2017") %>% 
+  ggplot(aes(x = sixteen, y = seventeen)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(group = NULL))
+#np_exotic_seed_bank_richness_scatter
+#no correlation
+
+### Calculate lm(), R^2 of exotic richness over time
+np_exotic_seed_bank_richness_lm <- lm(np_exotic_seed_bank_richness$richness ~ np_exotic_seed_bank_richness$Year)
+# summary(np_exotic_seed_bank_richness_lm)
+#richness = -2.357(Year) + 4772.167, R^2 = .3516, p = .0046
+
+### Check diagnostic graphs
+# plot(np_exotic_seed_bank_richnes_lm)
+#diagnostic graphs look pretty good
+
+### Calculate Pearson's r
+# cor.test(np_exotic_seed_bank_richness$Year, np_exotic_seed_bank_richness$richness)
+#r = -.59, medium correlation
+
+## Kruskal-Wallis
+
+### Check for normality
+np_exotic_seed_bank_richness_hist <- ggplot(np_exotic_seed_bank_richness) +
+  geom_histogram(aes(x = richness))
+#np_exotic_seed_bank_richnes_hist
+####not normal
+
+## Kruskal-Wallis test
+np_exotic_seed_bank_richness_kw <- kruskal.test(richness ~ Year, data = np_exotic_seed_bank_richness)
+#np_exotic_seed_bank_richness_kw
+###p = .001425, median exotic richness in 2016 seed bank different from 2017
+
+## Calculate native species richness
+np_native_seed_bank_richness <- np_seed_bank_cover %>% 
+  filter(Native_Status == "N") %>% 
+  group_by(Year, Plot, Native_Status) %>% 
+  summarize(richness = length(total))
+
+## Plot native richness vs. time
+np_native_seed_bank_richness_scatter <- np_native_seed_bank_richness %>% 
+  ggplot(aes(x = Year, y = richness, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(x = Year, group = NULL), size = .2) +
+  labs(title = "Native Species Richness", x = "Year", y = "Percent Cover", caption = "CS, MS, PH1 decreased from 2016 seed bank to 2017") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,25)) +
+  scale_x_continuous(labels = c("2016", " ", "2017", " ", "2018"))
+np_native_seed_bank_richness_scatter
+
+## Plot columns of native richness, 2016 seed bank vs. 2017
+np_native_seed_bank_richness_col <- np_native_seed_bank_richness %>% 
+  ggplot(aes(x = Plot, y = richness)) +
+  geom_col(aes(fill = as.factor(Year)), position = "dodge") +
+  labs(title = "Native Species Richness", x = "Vernal Pool", y = "Species Richness", caption = "MS decreased from 2016 seed bank, but RT & WT1 increased a lot in 2017; \n All decreased/stayed the same 2017 to 2018") +
+  theme_classic() +
+  scale_fill_manual(values = c("darkgreen", "chartreuse3", "chartreuse2"), name = "Year", labels = c("2016 seed bank", "2017 monitoring", "2018 monitoring")) +
+  scale_y_continuous(expand = c(0,0)) +
+  scale_x_discrete(limits = c("CS", "WT1", "TP", "WT2", "PH1", "MS", "RT"))
+np_native_seed_bank_richness_col
+
+## Plot correlation of native richness, 2016 seed bank vs. 2017
+np_native_seed_bank_richness_scatter <- np_native_seed_bank_richness %>% 
+  spread(Year, richness) %>% 
+  rename(sixteen = "2016") %>% 
+  rename(seventeen = "2017") %>% 
+  ggplot(aes(x = sixteen, y = seventeen)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(group = NULL))
+#np_native_seed_bank_richness_scatter
+#no correlation
+
+### Calculate lm(), R^2 of exotic richness over time
+np_native_seed_bank_richness_lm <- lm(np_native_seed_bank_richness$richness ~ np_native_seed_bank_richness$Year)
+# summary(np_native_seed_bank_richness_lm)
+#richness = -.8571(Year) + 17483.62, R^2 = .0495, p = .3324
+
+### Check diagnostic graphs
+# plot(np_native_seed_bank_richness_lm)
+#diagnostic graphs look pretty good
+
+### Calculate Pearson's r
+# cor.test(np_native_seed_bank_richness$Year, np_native_seed_bank_richness$richness)
+#r = -.222, weak correlation
+
+## Kruskal-Wallis
+
+### Check for normality
+np_native_seed_bank_richness_hist <- ggplot(np_native_seed_bank_richness) +
+  geom_histogram(aes(x = richness))
+#np_native_seed_bank_richness_hist
+####not normal
+
+## Kruskal-Wallis test
+np_native_seed_bank_richness_kw <- kruskal.test(richness ~ Year, data = np_native_seed_bank_richness)
+#np_native_seed_bank_richness_kw
+###p = .6387, median exotic richness in 2016 seed bank not different from 2017
+
+
+
+## CS
+
+### Convert CS seed bank and percent cover (max percent cover in each year) to presence/absence data
+cs_seed_bank_cover <- np_seed_bank_cover %>% 
+  filter(Plot == "CS") %>% 
+  select(Species_Full_Name, Year, Native_Status, total) %>% 
+  spread(Year, total) %>% 
+  gather(Year, total, 4:6) %>% 
+  mutate(present = case_when(total>0 ~ "1"))
+cs_seed_bank_cover$present[is.na(cs_seed_bank_cover$present)] <- 0
+cs_seed_bank_cover$present <- as.numeric(cs_seed_bank_cover$present)
+
+### Wilcoxon signed-rank for exotics
+cs_exotic_seed_bank_cover_wsr <- cs_seed_bank_cover %>% 
+  filter(Native_Status == "E") %>% 
+  select(Species_Full_Name, Year, present) %>% 
+  spread(Year, present) %>%
+  rename(sixteen = "2016") %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(cs_exotic_seed_bank_cover_wsr$sixteen, cs_exotic_seed_bank_cover_wsr$seventeen, paired = TRUE)
+#p = .1647, exotic species composition not different 2016 vs. 2017
+#wilcox.test(cs_exotic_seed_bank_cover_wsr$sixteen, cs_exotic_seed_bank_cover_wsr$eighteen, paired = TRUE)
+#p = .261, exotic species composition not different 2016 vs. 2018
+
+### Wilcoxon signed-rank for natives
+cs_native_seed_bank_cover_wsr <- cs_seed_bank_cover %>% 
+  filter(Native_Status == "N") %>% 
+  select(Species_Full_Name, Year, present) %>% 
+  spread(Year, present) %>%
+  rename(sixteen = "2016") %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(cs_native_seed_bank_cover_wsr$sixteen, cs_native_seed_bank_cover_wsr$seventeen, paired = TRUE)
+#p = .5059, native species composition not different 2016 vs. 2017
+#wilcox.test(cs_native_seed_bank_cover_wsr$sixteen, cs_native_seed_bank_cover_wsr$eighteen, paired = TRUE)
+#p = .5255, native species composition not different 2016 vs. 2018
+
+## PH1
+
+### Convert PH1 seed bank and percent cover (max percent cover in each year) to presence/absence data
+ph1_seed_bank_cover <- np_seed_bank_cover %>% 
+  filter(Plot == "PH1") %>% 
+  select(Species_Full_Name, Year, Native_Status, total) %>% 
+  spread(Year, total) %>% 
+  gather(Year, total, 4:6) %>% 
+  mutate(present = case_when(total>0 ~ "1"))
+ph1_seed_bank_cover$present[is.na(ph1_seed_bank_cover$present)] <- 0
+ph1_seed_bank_cover$present <- as.numeric(ph1_seed_bank_cover$present)
+
+### Wilcoxon signed-rank for exotics
+ph1_exotic_seed_bank_cover_wsr <- ph1_seed_bank_cover %>% 
+  filter(Native_Status == "E") %>% 
+  select(Species_Full_Name, Year, present) %>% 
+  spread(Year, present) %>%
+  rename(sixteen = "2016") %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(ph1_exotic_seed_bank_cover_wsr$sixteen, ph1_exotic_seed_bank_cover_wsr$seventeen, paired = TRUE)
+#p = .05719, exotic species composition not different 2016 vs. 2017
+#wilcox.test(ph1_exotic_seed_bank_cover_wsr$sixteen, ph1_exotic_seed_bank_cover_wsr$eighteen, paired = TRUE)
+#p = .03109, exotic species composition DIFFERENT 2016 vs. 2018
+
+### Wilcoxon signed-rank for natives
+ph1_native_seed_bank_cover_wsr <- ph1_seed_bank_cover %>% 
+  filter(Native_Status == "N") %>% 
+  select(Species_Full_Name, Year, present) %>% 
+  spread(Year, present) %>%
+  rename(sixteen = "2016") %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(ph1_native_seed_bank_cover_wsr$sixteen, ph1_native_seed_bank_cover_wsr$seventeen, paired = TRUE)
+#p = .1169, native species composition not different 2016 vs. 2017
+#wilcox.test(ph1_native_seed_bank_cover_wsr$sixteen, ph1_native_seed_bank_cover_wsr$eighteen, paired = TRUE)
+#p = .1647, native species composition not different 2016 vs. 2018
+
+## MS
+
+### Convert MS seed bank and percent cover (max percent cover in each year) to presence/absence data
+ms_seed_bank_cover <- np_seed_bank_cover %>% 
+  filter(Plot == "MS") %>% 
+  select(Species_Full_Name, Year, Native_Status, total) %>% 
+  spread(Year, total) %>% 
+  gather(Year, total, 4:6) %>% 
+  mutate(present = case_when(total>0 ~ "1"))
+ms_seed_bank_cover$present[is.na(ms_seed_bank_cover$present)] <- 0
+ms_seed_bank_cover$present <- as.numeric(ms_seed_bank_cover$present)
+
+### Wilcoxon signed-rank for exotics
+ms_exotic_seed_bank_cover_wsr <- ms_seed_bank_cover %>% 
+  filter(Native_Status == "E") %>% 
+  select(Species_Full_Name, Year, present) %>% 
+  spread(Year, present) %>%
+  rename(sixteen = "2016") %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(ms_exotic_seed_bank_cover_wsr$sixteen, ms_exotic_seed_bank_cover_wsr$seventeen, paired = TRUE)
+#p = .09476, exotic species composition not different 2016 vs. 2017
+#wilcox.test(ms_exotic_seed_bank_cover_wsr$sixteen, ms_exotic_seed_bank_cover_wsr$eighteen, paired = TRUE)
+#p = .4281, exotic species composition not different 2016 vs. 2018
+
+### Wilcoxon signed-rank for natives
+ms_native_seed_bank_cover_wsr <- ms_seed_bank_cover %>% 
+  filter(Native_Status == "N") %>% 
+  select(Species_Full_Name, Year, present) %>% 
+  spread(Year, present) %>%
+  rename(sixteen = "2016") %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(ms_native_seed_bank_cover_wsr$sixteen, ms_native_seed_bank_cover_wsr$seventeen, paired = TRUE)
+#p = .0124, native species composition DIFFERENT 2016 vs. 2017
+#wilcox.test(ms_native_seed_bank_cover_wsr$sixteen, ms_native_seed_bank_cover_wsr$eighteen, paired = TRUE)
+#p = .04117, native species composition DIFFERENT 2016 vs. 2018
+
+## RT
+
+### Convert MS seed bank and percent cover (max percent cover in each year) to presence/absence data
+rt_seed_bank_cover <- np_seed_bank_cover %>% 
+  filter(Plot == "RT") %>% 
+  select(Species_Full_Name, Year, Native_Status, total) %>% 
+  spread(Year, total) %>% 
+  gather(Year, total, 4:6) %>% 
+  mutate(present = case_when(total>0 ~ "1"))
+rt_seed_bank_cover$present[is.na(rt_seed_bank_cover$present)] <- 0
+rt_seed_bank_cover$present <- as.numeric(rt_seed_bank_cover$present)
+
+### Wilcoxon signed-rank for exotics
+rt_exotic_seed_bank_cover_wsr <- rt_seed_bank_cover %>% 
+  filter(Native_Status == "E") %>% 
+  select(Species_Full_Name, Year, present) %>% 
+  spread(Year, present) %>%
+  rename(sixteen = "2016") %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(rt_exotic_seed_bank_cover_wsr$sixteen, rt_exotic_seed_bank_cover_wsr$seventeen, paired = TRUE)
+#p = .02351, exotic species composition DIFFERENT 2016 vs. 2017
+#wilcox.test(rt_exotic_seed_bank_cover_wsr$sixteen, rt_exotic_seed_bank_cover_wsr$eighteen, paired = TRUE)
+#p = .002, exotic species composition DIFFERENT 2016 vs. 2018
+
+### Wilcoxon signed-rank for natives
+rt_native_seed_bank_cover_wsr <- rt_seed_bank_cover %>% 
+  filter(Native_Status == "N") %>% 
+  select(Species_Full_Name, Year, present) %>% 
+  spread(Year, present) %>%
+  rename(sixteen = "2016") %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(rt_native_seed_bank_cover_wsr$sixteen, rt_native_seed_bank_cover_wsr$seventeen, paired = TRUE)
+#p = .0001, native species composition DIFFERENT 2016 vs. 2017
+#wilcox.test(rt_native_seed_bank_cover_wsr$sixteen, rt_native_seed_bank_cover_wsr$eighteen, paired = TRUE)
+#p = .0002, native species composition DIFFERENT 2016 vs. 2018
+
+## TP
+
+### Convert MS seed bank and percent cover (max percent cover in each year) to presence/absence data
+tp_seed_bank_cover <- np_seed_bank_cover %>% 
+  filter(Plot == "TP") %>% 
+  select(Species_Full_Name, Year, Native_Status, total) %>% 
+  spread(Year, total) %>% 
+  gather(Year, total, 4:6) %>% 
+  mutate(present = case_when(total>0 ~ "1"))
+tp_seed_bank_cover$present[is.na(tp_seed_bank_cover$present)] <- 0
+tp_seed_bank_cover$present <- as.numeric(tp_seed_bank_cover$present)
+
+### Wilcoxon signed-rank for exotics
+tp_exotic_seed_bank_cover_wsr <- tp_seed_bank_cover %>% 
+  filter(Native_Status == "E") %>% 
+  select(Species_Full_Name, Year, present) %>% 
+  spread(Year, present) %>%
+  rename(sixteen = "2016") %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(tp_exotic_seed_bank_cover_wsr$sixteen, tp_exotic_seed_bank_cover_wsr$seventeen, paired = TRUE)
+#p = .1414, exotic species composition not different 2016 vs. 2017
+#wilcox.test(tp_exotic_seed_bank_cover_wsr$sixteen, tp_exotic_seed_bank_cover_wsr$eighteen, paired = TRUE)
+#p = .1414, exotic species composition not different 2016 vs. 2018
+
+### Wilcoxon signed-rank for natives
+tp_native_seed_bank_cover_wsr <- tp_seed_bank_cover %>% 
+  filter(Native_Status == "N") %>% 
+  select(Species_Full_Name, Year, present) %>% 
+  spread(Year, present) %>%
+  rename(sixteen = "2016") %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(tp_native_seed_bank_cover_wsr$sixteen, tp_native_seed_bank_cover_wsr$seventeen, paired = TRUE)
+#p = .003, native species composition DIFFERENT 2016 vs. 2017
+#wilcox.test(tp_native_seed_bank_cover_wsr$sixteen, tp_native_seed_bank_cover_wsr$eighteen, paired = TRUE)
+#p = .03109, native species composition not different 2016 vs. 2018
+
+
+## WT1
+
+### Convert MS seed bank and percent cover (max percent cover in each year) to presence/absence data
+wt1_seed_bank_cover <- np_seed_bank_cover %>% 
+  filter(Plot == "WT1") %>% 
+  select(Species_Full_Name, Year, Native_Status, total) %>% 
+  spread(Year, total) %>% 
+  gather(Year, total, 4:6) %>% 
+  mutate(present = case_when(total>0 ~ "1"))
+wt1_seed_bank_cover$present[is.na(wt1_seed_bank_cover$present)] <- 0
+wt1_seed_bank_cover$present <- as.numeric(wt1_seed_bank_cover$present)
+
+### Wilcoxon signed-rank for exotics
+wt1_exotic_seed_bank_cover_wsr <- wt1_seed_bank_cover %>% 
+  filter(Native_Status == "E") %>% 
+  select(Species_Full_Name, Year, present) %>% 
+  spread(Year, present) %>%
+  rename(sixteen = "2016") %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(wt1_exotic_seed_bank_cover_wsr$sixteen, wt1_exotic_seed_bank_cover_wsr$seventeen, paired = TRUE)
+#p = .07588, exotic species composition not different 2016 vs. 2017
+#wilcox.test(wt1_exotic_seed_bank_cover_wsr$sixteen, wt1_exotic_seed_bank_cover_wsr$eighteen, paired = TRUE)
+#p = .01109, exotic species composition DIFFERENT 2016 vs. 2018
+
+### Wilcoxon signed-rank for natives
+wt1_native_seed_bank_cover_wsr <- wt1_seed_bank_cover %>% 
+  filter(Native_Status == "N") %>% 
+  select(Species_Full_Name, Year, present) %>% 
+  spread(Year, present) %>%
+  rename(sixteen = "2016") %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(wt1_native_seed_bank_cover_wsr$sixteen, wt1_native_seed_bank_cover_wsr$seventeen, paired = TRUE)
+#p <.01, native species composition DIFFERENT 2016 vs. 2017
+#wilcox.test(wt1_native_seed_bank_cover_wsr$sixteen, wt1_native_seed_bank_cover_wsr$eighteen, paired = TRUE)
+#p = .002, native species composition DIFFERENT 2016 vs. 2018
+
+## WT2
+
+### Convert MS seed bank and percent cover (max percent cover in each year) to presence/absence data
+wt2_seed_bank_cover <- np_seed_bank_cover %>% 
+  filter(Plot == "WT2") %>% 
+  select(Species_Full_Name, Year, Native_Status, total) %>% 
+  spread(Year, total) %>% 
+  gather(Year, total, 4:6) %>% 
+  mutate(present = case_when(total>0 ~ "1"))
+wt2_seed_bank_cover$present[is.na(wt2_seed_bank_cover$present)] <- 0
+wt2_seed_bank_cover$present <- as.numeric(wt2_seed_bank_cover$present)
+
+### Wilcoxon signed-rank for exotics
+wt2_exotic_seed_bank_cover_wsr <- wt2_seed_bank_cover %>% 
+  filter(Native_Status == "E") %>% 
+  select(Species_Full_Name, Year, present) %>% 
+  spread(Year, present) %>%
+  rename(sixteen = "2016") %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(wt2_exotic_seed_bank_cover_wsr$sixteen, wt2_exotic_seed_bank_cover_wsr$seventeen, paired = TRUE)
+#p = .1647, exotic species composition not different 2016 vs. 2017
+#wilcox.test(wt2_exotic_seed_bank_cover_wsr$sixteen, wt2_exotic_seed_bank_cover_wsr$eighteen, paired = TRUE)
+#p = .06277, exotic species composition not different 2016 vs. 2018
+
+### Wilcoxon signed-rank for natives
+wt2_native_seed_bank_cover_wsr <- wt2_seed_bank_cover %>% 
+  filter(Native_Status == "N") %>% 
+  select(Species_Full_Name, Year, present) %>% 
+  spread(Year, present) %>%
+  rename(sixteen = "2016") %>% 
+  rename(seventeen = "2017") %>% 
+  rename(eighteen = "2018")
+#wilcox.test(wt2_native_seed_bank_cover_wsr$sixteen, wt2_native_seed_bank_cover_wsr$seventeen, paired = TRUE)
+#p = .00114, native species composition DIFFERENT 2016 vs. 2017
+#wilcox.test(wt2_native_seed_bank_cover_wsr$sixteen, wt2_native_seed_bank_cover_wsr$eighteen, paired = TRUE)
+#p = .003, native species composition DIFFERENT 2016 vs. 2018
+
+
+```
+

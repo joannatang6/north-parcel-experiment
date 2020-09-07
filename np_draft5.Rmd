@@ -1,0 +1,750 @@
+---
+title: "NP Draft 5"
+author: "Joanna Tang"
+date: "9/4/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# ESA Talk
+
+```{r include = FALSE}
+
+# Loading packages, read in data
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(vegan)
+library(car)
+library(RColorBrewer)
+library(reshape2)
+library(knitr)
+library(kableExtra)
+library(FSA)
+library(plotly)
+library(ggsignif)
+library(lme4)
+library(bestNormalize)
+library(betareg)
+library(nlme)
+library(MASS)
+library(fitdistrplus)
+library(plotrix)
+
+np_percent_cover_master <- read_csv("np_percent_cover.csv")
+metadata <- read_csv("metadata.csv")
+
+```
+
+
+```{r include = FALSE}
+
+# Outline
+
+# 0. Tidy up data
+
+# 1. How does exotic community change over time?
+## 1a. How does total exotic percent cover change with time since restoration (and interannual climate variability?)? (boxplots)
+## 1b. Is there a threshold (# of years) after which exotic abundance increases? (linear model)
+## 1c. Do pools converge on the same exotic community composition over time? (NMDS)
+
+# 2. What environmental filters can be manipulated to decrease exotics?
+## 2a. How does the seedbank compare to the aboveground cover? (presence/absence data)
+## 2b. Does active management result in a different exotic community? (NMDS w/ old Del Sol data)
+## 2c. Do certain exotics and natives occupy the same (phenological) niche? (NMDS, or scatterplot b/t 2 species)
+
+# 3. What is the ideal monitoring plan?
+## 3a. Same as 1b -- is there a threshold after which exotics increase (i.e., what's the ideal duration of monitoring?)?
+## 3b. What is the ideal frequency/season of monitoring? (boxplots)
+
+
+```
+
+
+```{r include = FALSE}
+
+# 0. Tidy up data
+
+## Separate "Replicate" label into Replicate_Zone and Replicate_Number, join with species metadata, convert month and year to "date" column
+np_percent_cover <- np_percent_cover_master %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3"))
+np_percent_cover <- full_join(np_percent_cover, metadata) %>% 
+  mutate(month_number = case_when(Month == "JANUARY" ~ 1, Month == "FEBRUARY" ~ 2, Month == "MARCH" ~ 3, Month == "APRIL" ~ 4, Month == "MAY" ~ 5, Month == "JUNE" ~ 6, Month == "JULY" ~ 7, Month == "AUGUST" ~ 8, Month == "SEPTEMBER" ~ 9, Month == "OCTOBER" ~ 10, Month == "NOVEMBER" ~ 11, Month == "DECEMBER" ~ 12)) %>% 
+  mutate(date = paste(Year, month_number, "1", sep="-" ))
+np_percent_cover$date = as.Date(np_percent_cover$date)
+
+```
+
+# 1. How does exotic community change over time?
+
+## 1a. How does total exotic percent cover change with time since restoration?
+
+Hypothesis: Exotics will be able to reinvade, causing increased exotic abundance and diversity with increased time since restoration.
+
+Results: Significant increase in total exotic percent cover after year 6 -- due to increase in exotics in transition and upland zones.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1a. How does total exotic percent cover change with time since restoration (and interannual climate variability?)? (boxplots)
+
+
+## Create new data frame with creation year of each pool
+creation_year_df <- data.frame(Plot = c("PH1", "TP", "RT", "MS", "WT1", "WT2", "CS"), Creation_Year = c("2010", "2012", "2012", "2015", "2014", "2014", "2013"))
+
+## Calculate total exotic % cover per quadrat, find max total exotic % cover per quadrat per year, add time since restoration column
+np_annual_total_exotic <- np_percent_cover %>%
+  filter(Native_Status == "E") %>% 
+  filter(Year > 2016) %>% 
+  group_by(date, Year, Month, Plot, Replicate, Replicate_Zone) %>% 
+  summarize(total_exotic_pc = sum(percent_cover)) %>% 
+  drop_na() %>% 
+  group_by(Year, Plot, Replicate, Replicate_Zone) %>% 
+  summarize(max_annual_exotic_pc = max(total_exotic_pc)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year)
+
+## Dataframe of median of the max annual total % cover of each pool
+np_annual_total_exotic_medians <- np_annual_total_exotic %>% 
+  group_by(Year, Plot, Time_Since) %>% 
+  summarize(median = median(max_annual_exotic_pc))
+
+## Boxplot of total exotic % cover
+total_exotic_pc_box <- np_annual_total_exotic %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = max_annual_exotic_pc)) +
+  geom_boxplot() +
+  geom_jitter(width = .2, alpha = .4) +
+  labs(title = "Total Percent Cover of Exotics", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "Increase in median after year 6 driven by sig incraese in transition and upland zones (Dunn's Kruskal-Wallis Multiple Comparisons p =)") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0))
+total_exotic_pc_box
+
+## Boxplot of total exotic % cover, by zone
+total_exotic_pc_zone_box <- np_annual_total_exotic %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = max_annual_exotic_pc)) +
+  geom_boxplot() +
+  geom_jitter(width = .2, alpha = .4) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Total Percent Cover of Exotics, by zone", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "Increase in median after year 6 driven by sig incraese in transition and upland zones (Dunn's Kruskal-Wallis Multiple Comparisons p =)") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0))
+total_exotic_pc_zone_box
+
+## Boxplot of total exotic % cover, by monitoring year -- everything's higher in 2019...
+total_exotic_pc_year_box <- np_annual_total_exotic %>% 
+  ggplot(aes(x = as.factor(Year), y = max_annual_exotic_pc)) +
+  geom_boxplot() +
+  geom_jitter(width = .2, alpha = .4) +
+  labs(title = "Total Percent Cover of Exotics", x = "Year", y = "Percent Cover", caption = "everything's higher in 2019...") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0))
+total_exotic_pc_year_box
+
+
+
+
+# Check for normality -- not normal
+pc_hist <- ggplot(np_annual_total_exotic, aes(x = max_annual_exotic_pc)) +
+  geom_histogram()
+pc_qq <- ggplot(np_annual_total_exotic, aes(sample = max_annual_exotic_pc)) +
+  geom_qq()
+
+#### from original data analysis for Cal-IPC poster
+## 95% CI around median
+#lower CI = (n/2) - (1.96*sqrt(n))/2 th ranked value
+#upper CI = 1 + (n/2) + (1.96*sqrt(n))/2 th ranked value
+
+#n(3yrs) = 3
+#lower CI = (3/2) - (1.96*sqrt(3/2)) = -.9 -> 1st ranked value = 2.38
+#upper CI = 1 + (3/2) + (1.96*sqrt(3/2)) = 4.9005 -> 3rd ranked value -> 3.0
+
+#n(4yrs) = 4
+#lower CI = (4/2) - (1.96*sqrt(4/2)) = -.77 -> 1st ranked value = 2.73
+#upper CI = 1 + (4/2) + (1.96*sqrt(4/2)) = 5.77 -> 4th ranked value -> 4.27
+
+#n(5yrs) = 5
+#lower CI = (5/2) - (1.96*sqrt(5/2)) = -.60 -> 1st ranked value = 2.65
+#upper CI = 1 + (5/2) + (1.96*sqrt(5/2)) = 6.60 -> 5th ranked value -> 11.533
+
+#n(6yrs) = 3
+#lower CI = (3/2) - (1.96*sqrt(3/2)) = -.9 -> 1st ranked value = 4.90
+#upper CI = 1 + (3/2) + (1.96*sqrt(3/2)) = 4.9005 -> 3rd ranked value -> 17.86
+
+#n(7yrs) = 3
+#lower CI = (3/2) - (1.96*sqrt(3/2)) = -.9 -> 1st ranked value = 8.60
+#upper CI = 1 + (3/2) + (1.96*sqrt(3/2)) = 4.9005 -> 3rd ranked value -> 19.12
+
+exotic_pc_ci_df <- np_percent_cover %>%
+  filter(Native_Status == "E") %>% 
+  filter(Year > 2016) %>% 
+  group_by(date, Year, Month, Plot, Replicate, Replicate_Zone) %>% 
+  summarize(total_exotic_pc = sum(percent_cover)) %>% 
+  drop_na() %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  filter(Time_Since >2) %>% 
+  filter(Time_Since <8) %>% 
+  group_by(Time_Since) %>% 
+  summarize(
+    median = median(total_exotic_pc),
+    max = max(total_exotic_pc),
+    min = min(total_exotic_pc)
+  )
+
+exotic_pc_ci_zone_df <- np_percent_cover %>%
+  filter(Native_Status == "E") %>% 
+  filter(Year > 2016) %>% 
+  group_by(date, Year, Month, Plot, Replicate, Replicate_Zone) %>% 
+  summarize(total_exotic_pc = sum(percent_cover)) %>% 
+  drop_na() %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  filter(Time_Since >2) %>% 
+  filter(Time_Since <8) %>% 
+  group_by(Time_Since, Replicate_Zone) %>% 
+  summarize(
+    median = median(total_exotic_pc),
+    max = max(total_exotic_pc),
+    min = min(total_exotic_pc)
+  )
+
+#### from original data analysis for Cal-IPC poster
+#n(3yrs) = 23
+#lower CI = (23/2) - (1.96*sqrt(23/2)) = 4.85 -> 4th ranked value = 1.33
+#upper CI = 1 + (23/2) + (1.96*sqrt(23/2)) = 19.15 -> 20th ranked value -> 3.50
+
+#n(4yrs) = 30
+#lower CI = (30/2) - (1.96*sqrt(30/2)) = 7.41 -> 7th ranked value = 2.00
+#upper CI = 1 + (30/2) + (1.96*sqrt(30/2)) = 23.59 ->24th ranked value -> 4.33
+
+#n(5yrs) = 34
+#lower CI = (34/2) - (1.96*sqrt(34/2)) = 9.92 -> 9th ranked value = 2.50
+#upper CI = 1 + (34/2) + (1.96*sqrt(34/2)) = 26.08 -> 26th ranked value -> 8.67
+
+#n(6yrs) = 23
+#lower CI = (23/2) - (1.96*sqrt(23/2)) = 4.85 -> 4th ranked value = 2.00
+#upper CI = 1 + (23/2) + (1.96*sqrt(23/2)) = 19.15 -> 20th ranked value -> 15.00
+
+#n(7yrs) = 22
+#lower CI = (22/2) - (1.96*sqrt(22/2)) = 4.50 -> 4th ranked value = 2.50
+#upper CI = 1 + (22/2) + (1.96*sqrt(22/2)) = 18.50 -> 18th ranked value -> 25.33
+
+## Column graph of total % cover vs. time since, w/ 95% CI
+total_exotic_col <- exotic_pc_ci_df %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = median)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = min, ymax = max, width = .2)) +
+  labs(title = "Total Percent Cover of Exotics", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "Sig increase in median during year 6 (Dunn's Kruskal-Wallis Multiple Comparisons p = )") +
+  theme_classic() +
+    scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 25)) +
+  theme(text = element_text(size=20))
+#total_exotic_col
+
+## Column graph of total % cover vs. time since, w/ 95% CI, by zone
+total_avg_exotic_zone_col <- exotic_pc_ci_zone_df %>% 
+   ggplot(aes(x = as.factor(Time_Since), y = median)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = min, ymax = max, width = .2)) +
+  facet_wrap(~Replicate_Zone) +
+  geom_signif(comparisons = list(c("5", "6")), map_signif_level = TRUE) +
+  labs(title = "Total Percent Cover of Exotics", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "Sig increase in median during year 6 driven by sig incraese in transition zone (Dunn's Kruskal-Wallis Multiple Comparisons p = )") +
+  theme_classic() +
+      scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 30)) +
+  theme(text = element_text(size=20))
+#total_avg_exotic_zone_col
+
+```
+
+
+## 1b. Is there a threshold (# of years) after which exotic abundance increases?
+
+Hypothesis: We will see increased exotic species percent cover and diversity with increased time since restoration due to reinvasion.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1b. Is there a threshold (# of years) after which exotic abundance increases? (linear model)
+
+# Scatterplot of median of annual max total % exotic cover
+np_annual_total_exotic_medians_scatter <- np_annual_total_exotic_medians %>% 
+  ggplot(aes(x = Time_Since, y = median, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(x = Time_Since, group = NULL), se = TRUE, size = .5) +
+  labs(title = "Total Percent Cover of Exotics", x = "Time Since Restoration (years)", y = "Median Percent Cover (%)", caption = "High variation; WT2, PH1, & esp WT1 and RT increased") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0))
+np_annual_total_exotic_medians_scatter
+
+```
+
+
+
+## 1c. Do pools converge on the same exotic community composition over time?
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1c. Do pools converge on the same exotic community composition over time? (NMDS)
+
+# From np_draft3.Rmd -- Compare 2016 exotic seed bank species to May 2017 anad 2018 percent cover species, by pool and zone
+
+## Take out zeros in 2016 seed bank data
+seedbank_2016[seedbank_2016 == 0] <- NA
+
+## Calculate exotic and native species richness for 2016 seed bank data
+richness_2016_seed_bank <- seedbank_2016 %>% 
+  add_column(Year = 2016) %>% 
+  select(Plot, Replicate, Replicate_Zone, Year, Native_Status, Count) %>% 
+    na.omit() %>%
+  group_by(Plot, Replicate, Replicate_Zone, Year, Native_Status) %>% 
+  summarize(richness = length(Count))
+
+## Calculate exotic and native species richness for May 2017/2018 percent cover data, then join with 2016 seed bank data
+np_seed_bank_cover_may <- np_percent_cover %>% 
+  filter(month_number == 5) %>% 
+  group_by(Plot, Replicate, Replicate_Zone, Year, Native_Status) %>% 
+  summarize(richness = length(percent_cover)) %>% 
+  full_join(richness_2016_seed_bank) %>% 
+  na.omit()
+
+## Calculate mean exotic species richness, by zone in each plot
+np_exotic_richness_may <- np_seed_bank_cover_may %>% 
+  filter(Native_Status == "E") %>% 
+  group_by(Year, Plot, Replicate_Zone) %>% 
+  summarize(
+    mean = mean(richness),
+    sd = sd(richness))
+
+## Plot columns of exotic richness, 2016 seed bank vs. 2017, by zone
+np_exotic_richness_may_col <- np_exotic_richness_may %>% 
+  ggplot(aes(x = Plot, y = mean)) +
+  geom_col(aes(fill = as.factor(Year)), position = "dodge") +
+  geom_errorbar(aes(ymin = mean-sd, ymax = mean+sd, width = .5, fill = as.factor(Year)), position = position_dodge(width = 1)) +
+  facet_wrap(~Replicate_Zone) +
+labs(title = "Exotic Species Richness, by Zone", x = "Vernal Pool", y = "Species Richness", caption = "All pools decreased from 2016 seed bank to 2017; \n MS decreased in 2018, but RT & WT1 increased a lot in 2018") +
+  theme_classic() +
+  scale_fill_manual(values = c("darkgreen", "chartreuse3", "chartreuse2"), name = "Year", labels = c("2016 seed bank", "2017 monitoring", "2018 monitoring")) +
+  scale_y_continuous(expand = c(0,0)) +
+  scale_x_discrete(limits = c("RT", "PH1", "MS", "TP", "WT2", "CS", "WT1"))
+np_exotic_richness_may_col
+
+### Check diagnostic graphs
+# plot(np_exotic_seed_bank_richnes_lm)
+#diagnostic graphs look pretty good
+
+### Calculate Pearson's r
+# cor.test(np_exotic_seed_bank_richness$Year, np_exotic_seed_bank_richness$richness)
+#r = -.59, medium correlation
+
+## Kruskal-Wallis
+
+### Check for normality
+#np_exotic_seed_bank_richness_hist <- ggplot(np_exotic_seed_bank_richness) +
+  geom_histogram(aes(x = richness))
+#np_exotic_seed_bank_richnes_hist
+####not normal
+
+## Kruskal-Wallis test
+#np_exotic_seed_bank_richness_kw <- kruskal.test(richness ~ Year, data = np_exotic_seed_bank_richness)
+#np_exotic_seed_bank_richness_kw
+###p = .001425, median exotic richness in 2016 seed bank different from 2017
+
+
+## NMDS for 2016 seed bank vs. 2017
+  
+### Add Year column to seedbank_2016
+seedbank_2016_year <- seedbank_2016 %>%
+  add_column(Year = 2016)
+  
+### Convert data (only 2016 seed bank and May 2017 transition zone data) to NMDS format
+may_2017_t <- np_percent_cover %>% 
+  filter(Month == "MAY", Year == "2017", Replicate_Zone == "T") %>% 
+  rename(Count = abundance) %>% 
+  full_join(seedbank_2016_year) %>% 
+  drop_na(Count) %>% 
+  filter(Replicate_Zone == "T")
+may_2017_t <- may_2017_t[-486,]
+may_2017_t <- may_2017_t[-489,]  
+may_2017_t <- may_2017_t %>%
+  spread(Species_Full_Name, Count) %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  select(-Replicate, -Month, -Replicate_Number, -date, -month_number, -Native_Status, -Species, -Growth_Form, -Bloom_Start, -Bloom_End, -Dominant_Zone, -Max_Height, -Disturbance_Favored, -Wetland_Obligate, -Growth_Habit, -Family, -percent_cover)
+
+
+### Perform NMDS for transition zone
+may_2017_t_nmds <-  metaMDS(comm = select(may_2017_t, -Plot, -Replicate_Zone, -Year), distance = "bray", trace = FALSE, autotransform = FALSE)
+
+### Make plot with polygons by Plot
+ordiplot(may_2017_t_nmds, type = "point", label = TRUE)
+ordihull(may_2017_t_nmds, groups = may_2017_t$Year, draw = "polygon", label = TRUE)
+
+```
+
+
+# 2. What environmental filters can be manipulated to decrease exotics?
+## 2a. How does the seedbank compare to the aboveground cover?
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 2a. How does the seedbank compare to the aboveground cover? (presence/absence data)
+
+## Add Year column to seedbank_2016, add presence/absence column
+seedbank_2016_pa <- seedbank_2016 %>%
+  add_column(Year = 2016) %>% 
+  group_by(Year, Plot, Replicate_Zone, Species_Full_Name, Native_Status) %>% 
+  summarize(
+    max = max(Count)
+  ) %>% 
+  filter(max>0) %>% 
+  add_column(present = 1)
+
+## Add presence/absence column to 2017 percent cover data, join to 2016 seed bank
+pa_2016_2017 <- np_percent_cover %>% 
+  filter(Year == "2017") %>% 
+  group_by(Year, Plot, Replicate_Zone, Species_Full_Name, Native_Status) %>% 
+  summarize(
+    max = max(percent_cover)
+  ) %>% 
+  add_column(present = 1) %>% 
+  full_join(seedbank_2016_pa) %>% 
+  na.omit()
+
+## Plot exotics in 2016 seed bank vs. 2017, by zone, for RT
+rt_exotic_pa <- pa_2016_2017 %>% 
+  filter(Native_Status == "E") %>% 
+  filter(Plot == "RT") %>% 
+  ggplot(aes(x = Species_Full_Name, y = present)) +
+  geom_col(aes(fill = as.factor(Year))) +
+  facet_wrap(~Replicate_Zone) +
+  scale_fill_manual(values = c("darkgreen", "chartreuse4"), label = c("2016 seed bank", "2017 monitoring"), name = "Year") +
+    labs(title = "RT: Exotic Species in Seed Bank vs. Monitoring", x = "Species", y = "Presence", caption = "More exotics coming up in upland zone than are in seed bank") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90))
+rt_exotic_pa
+
+# Scatter comparing 2016 vs 2017 presence/absence
+exotic_pa_scatter <- pa_2016_2017 %>% 
+  filter(Native_Status == "E") %>% 
+  spread(Year, present) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(sixteen = "2016") %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  ggplot(aes(x = sixteen, y = seventeen)) +
+  geom_jitter(aes(color = Species_Full_Name, shape = Plot)) +
+  facet_wrap(~Replicate_Zone) +
+  scale_fill_manual(values = c("darkgreen", "chartreuse4"), label = c("2016 seed bank", "2017 monitoring"), name = "Year") +
+    labs(title = "Exotic Species in Seed Bank vs. Monitoring", x = "Species", y = "Presence", caption = "More exotics coming up in upland zone than are in seed bank") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90))
+ggplotly(exotic_pa_scatter)
+
+
+# Plot % cover for seed bank + monitoring species
+exotic_pa_cover_both <- pa_2016_2017 %>% 
+  filter(Native_Status == "E") %>% 
+  spread(Year, present) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(sixteen = "2016") %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  mutate(both = seventeen + sixteen) %>% 
+  filter(both == 2) %>% 
+  ggplot(aes(y = max, x = Species_Full_Name)) +
+  geom_point(aes(color = Plot)) +
+  facet_wrap(~Replicate_Zone) +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 5)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90))
+exotic_pa_cover_both
+
+# Plot % cover for just monitoring species
+exotic_pa_cover <- pa_2016_2017 %>% 
+  filter(Native_Status == "E") %>% 
+  spread(Year, present) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(sixteen = "2016") %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  mutate(both = seventeen + sixteen) %>% 
+  filter(seventeen == 1) %>% 
+  filter(both == 1) %>% 
+  ggplot(aes(y = max, x = Species_Full_Name)) +
+  geom_point(aes(color = Plot)) +
+  facet_wrap(~Replicate_Zone) +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 45)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90))
+exotic_pa_cover
+
+```
+
+
+
+## 2b. Does active management result in a different exotic community?
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 2b. Does active management result in a different exotic community? (NMDS w/ old Del Sol data)
+
+# Plot Del Sol percent cover
+del_sol_cover <- del_sol %>% 
+  full_join(metadata) %>% 
+  drop_na(Plot) %>% 
+  group_by(Plot, Species_Full_Name, Native_Status) %>% 
+  summarize(
+    cover = mean(cover)
+  )
+
+del_sol_cover_scatter <- ggplot(del_sol_cover, aes(x = Species_Full_Name, y = cover)) +
+  geom_point(aes(color = Plot)) +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 70)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  facet_wrap(~Native_Status)
+del_sol_cover_scatter
+
+# Plot Del Sol vs. NP 2017 percent cover, using mean of each species
+del_sol_cover_col <-  np_percent_cover %>% 
+  filter(Year == "2017") %>% 
+  group_by(Year, Plot, Replicate_Zone, Species_Full_Name, Native_Status) %>% 
+  summarize(
+    cover = max(percent_cover)
+  ) %>% 
+  full_join(del_sol_cover) %>% 
+  drop_na(Native_Status) %>% 
+  ggplot(aes(x = reorder(Species_Full_Name, -cover), y = cover)) +
+  geom_col(aes(fill = as.factor(Year)), position = "dodge") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  facet_wrap(~Native_Status)
+del_sol_cover_col
+```
+
+
+
+
+
+
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# Trying to do non-independent stats tests for Cal-IPC poster -- friedman test
+
+#time_friedman <- friedman.test(average_abundance ~ Plot | Creation_Year, data = np_annual_total_exotic_count)
+#np_annual_total_exotic_count$Plot <- factor(np_annual_total_exotic_count$Plot)
+#np_annual_total_exotic_count$Time_Since <- factor(np_annual_total_exotic_count$Time_Since)
+#table(np_annual_total_exotic_count$Plot,np_annual_total_exotic_count$Year)
+
+#wb <- aggregate(warpbreaks$breaks,
+#                by = list(w = warpbreaks$wool,
+#                          t = warpbreaks$tension),
+#                FUN = mean)
+#wb
+#friedman.test(wb$x, wb$w, wb$t)
+#friedman.test(x ~ w | t, data = wb)
+
+```
+
+
+```{r include = FALSE}
+
+# Trying to do GLM for Cal-IPC poster
+
+#time_glm <- glm(average_abundance~Time_Since, data = np_annual_total_exotic_count, family = c("quasipoisson"))
+#summary(time_glm)
+
+#time_glmer <- glmer(average_abundance~Time_Since + (1|Plot), data = np_annual_total_exotic_count, family = c("poisson"))
+#AIC(time_glm, time_glmer)
+
+#descdist(np_annual_total_exotic$average_percent_cover, discrete = FALSE)
+#plot(fitdist(np_annual_total_exotic$average_percent_cover, distr = "beta"))
+
+## Plot GLM using plot()
+#time_x <- seq(1, 9, 1)
+#time_y <- predict(time2_glm, list(Time_Since = time_x), type = "response")
+#time_plot <- plot(np_annual_total_exotic_count$Time_Since, np_annual_total_exotic_count$average_abundance)
+#lines(time_x, time_y)
+
+
+###generalized linear model with binomial variance function and a logit link
+#glm(count~site, weight=totalcount, data=speciesdata, family=binomial(link="logit"))
+
+
+## Plot GLM using ggplot
+#time_glm_plot <- np_annual_total_exotic_count %>% 
+#  ggplot(aes(x = Time_Since, y = average_abundance)) +
+#  geom_point(aes(color = Plot)) +
+#  geom_smooth(method = "glm") +
+#  facet_wrap(~Replicate_Zone)
+#time_glm_plot
+
+#GLS
+#time_gls <- 
+
+#Random effects LM
+#lme(, random = ~ 1|Plot)
+
+```
+
+
+```{r echo = FALSE, message = FALSE, error = FALSE}
+
+# Trying to do non-independent stats for Cal-IPC poster -- Beta regression
+
+#glm(random = ~ 1|Plot)
+
+```
+
+
+```{r include = FALSE}
+
+# Final graphs I was going to put into Cal-IPC 2019 poster: Compare total % cover of exotics (sum of max % cover of each species) over time since restoration
+
+#Results: Significant increase in total exotic percent cover after year 5 -- due to increase in exotics in transition zone.
+
+
+## Create new data frame with creation year of each pool
+creation_year_df <- data.frame(Plot = c("PH1", "TP", "RT", "MS", "WT1", "WT2", "CS"), Creation_Year = c("2010", "2012", "2012", "2015", "2014", "2014", "2013"))
+
+## Calculate total exotic % cover in 2017/2018, add time since restoration column
+np_annual_total_exotic <- np_percent_cover %>%
+  filter(Native_Status == "E") %>% 
+  filter(Year > 2016) %>% 
+  group_by(date, Year, Plot, Replicate, Replicate_Zone) %>% 
+  summarize(total = sum(percent_cover)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year)
+  
+## Boxplot of total % cover vs. time since
+total_exotic_box <- np_annual_total_exotic %>% 
+  drop_na() %>% 
+  filter(Time_Since < 7) %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = total)) +
+  geom_boxplot() +
+  geom_jitter(width = .2, alpha = .4) +
+  geom_signif(comparisons = list(c("5", "6")), map_signif_level = TRUE) +
+  labs(title = "Total Percent Cover of Exotics", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "Sig increase in median during year 6 (Dunn's Kruskal-Wallis Multiple Comparisons p = .0075)") +
+  theme_classic() +
+    scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 100)) +
+  theme(text = element_text(size=20))
+total_exotic_box
+
+## Boxplot of total % cover vs. time since, by zone
+total_exotic_zone_box <- np_annual_total_exotic %>% 
+  drop_na() %>% 
+  filter(Time_Since < 7) %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = total)) +
+  geom_boxplot() +
+  geom_jitter(width = .2, alpha = .4) +
+  facet_wrap(~Replicate_Zone) +
+  geom_signif(comparisons = list(c("5", "6")), map_signif_level = TRUE) +
+  labs(title = "Total Percent Cover of Exotics", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "Sig increase in median during year 6 driven by sig incraese in transition zone (Dunn's Kruskal-Wallis Multiple Comparisons p = .0014)") +
+  theme_classic() +
+      scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 100)) +
+  theme(text = element_text(size=20))
+total_exotic_zone_box
+
+## Exploratory graphs to determine ANOVA vs. KW
+total_exotic_hist <- ggplot(np_annual_total_exotic, aes(x = total)) +
+  geom_histogram()
+total_exotic_hist
+total_exotic_qq <- ggplot(np_annual_total_exotic, aes(sample = total)) +
+  geom_qq()
+total_exotic_qq
+
+### Levene's test for equal variances
+#np_annual_total_exotic$Time_Since <- as.character(np_annual_total_exotic$Time_Since)
+#total_exotic_levene <- leveneTest(total ~ Time_Since, data = np_annual_total_exotic)
+#total_exotic_levene
+#p>.01, variances not equal
+
+### Test of variances (is largest variance <4x smallest variance)
+total_exotic_variances <- np_annual_total_exotic %>% 
+  drop_na() %>% 
+  group_by(Time_Since) %>% 
+  summarize(variance = var(total))
+#largest variance >4x smallest variance
+
+## KW
+
+#H0: Median total exotic percent cover across all years is equal
+#HA: At least 2 medians differ significantly
+
+np_annual_total_exotic$Time_Since <- as.factor(np_annual_total_exotic$Time_Since)
+total_exotic_kw <- kruskal.test(total ~ Time_Since, data = np_annual_total_exotic)
+total_exotic_kw
+
+## Post-hoc Dunn's test
+total_exotic_dunn <- dunnTest(total ~ Time_Since, data = np_annual_total_exotic)
+print(total_exotic_dunn, dunn.test.results = TRUE) #5-6 is sig, p = .0075
+
+##KW/Post-hoc per zone
+np_annual_total_exotic_c <- np_annual_total_exotic %>% 
+  filter(Replicate_Zone == "C")
+total_exotic_c_kw <-kruskal.test(total ~ Time_Since, data = np_annual_total_exotic_c)
+total_exotic_c_kw
+
+np_annual_total_exotic_t <- np_annual_total_exotic %>% 
+  filter(Replicate_Zone == "T")
+total_exotic_t_kw <-kruskal.test(total ~ Time_Since, data = np_annual_total_exotic_t)
+total_exotic_t_kw
+total_exotic_dunn_t <- dunnTest(total ~ Time_Since, data = np_annual_total_exotic_t)
+print(total_exotic_dunn_t, dunn.test.results = TRUE) #5-6 is sig (p = .0014)
+
+np_annual_total_exotic_u <- np_annual_total_exotic %>% 
+  filter(Replicate_Zone == "U")
+total_exotic_u_kw <- kruskal.test(total ~ Time_Since, data = np_annual_total_exotic_u)
+total_exotic_u_kw
+total_exotic_dunn_u <- dunnTest(total ~ Time_Since, data = np_annual_total_exotic_u)
+print(total_exotic_dunn_u, dunn.test.results = TRUE)
+
+## ANOVA
+#total_exotic_aov <- aov(total ~ Time_Since, data = np_annual_total_exotic)
+#summary(total_exotic_aov)
+
+## Post-hoc Tukey's HSD
+
+#total_exotic_post_hoc <- TukeyHSD(total_exotic_aov)
+#total_exotic_post_hoc #6-5 is sig
+
+
+## AOV/Post-hoc per zone
+#np_annual_total_exotic_c <- np_annual_total_exotic %>% 
+#  filter(Replicate_Zone == "C")
+#total_exotic_c_aov <- aov(total ~ Time_Since, data = np_annual_total_exotic_c)
+#summary(total_exotic_c_aov)
+
+#np_annual_total_exotic_t <- np_annual_total_exotic %>% 
+#  filter(Replicate_Zone == "T")
+#total_exotic_t_aov <- aov(total ~ Time_Since, data = np_annual_total_exotic_t)
+#summary(total_exotic_t_aov)
+#total_exotic_t_post_hoc <- TukeyHSD(total_exotic_t_aov)
+#total_exotic_t_post_hoc #6-5 is sig
+
+#np_annual_total_exotic_u <- np_annual_total_exotic %>% 
+#  filter(Replicate_Zone == "U")
+#total_exotic_u_aov <- aov(total ~ Time_Since, data = np_annual_total_exotic_u)
+#summary(total_exotic_u_aov)
+#total_exotic_u_post_hoc <- TukeyHSD(total_exotic_u_aov)
+#total_exotic_u_post_hoc
+
+```
+
+

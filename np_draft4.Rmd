@@ -1,0 +1,821 @@
+---
+title: "NP Draft 4"
+author: "Joanna Tang"
+date: "2/26/2019"
+output: html_document
+---
+
+# CalBotSoc poster
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r include = FALSE}
+
+# Loading packages, read in data
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(vegan)
+library(car)
+library(RColorBrewer)
+library(reshape2)
+library(knitr)
+library(kableExtra)
+library(FSA)
+library(plotly)
+
+np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
+np_percent_cover_master <- read_csv("np_percent_cover.csv")
+metadata <- read_csv("metadata.csv")
+np_2018_seed_bank_master <- read_csv("np.2018.seed.bank.csv")
+biomass_master <- read_csv("biomass.csv")
+del_sol <- read_csv("delsol.csv")
+noaa <- read_csv("1567450.csv")
+
+```
+
+
+```{r include = FALSE}
+
+# Outline
+# 0. Tidy up data
+# 1. How does species abundance and diversity correlate with time since restoration?
+# 1a. compare April/May total % cover of exotic species over time, by zone
+# 1b. compare April/May exotic species richness over time, by zone
+# 1c. compare April/May total % cover of native species over time, by zone
+# 1d. compare April/May native species richness over time, by zone
+# 1e. compare Native:Exotic over time (by month), by zone
+
+# 2. Is seed bank contributing to increase in exotics?
+# 2a. compare exotic species in 2016 seed bank vs. exotic species in April/May 2017, by pool, by zone
+
+
+# 3. What abiotic site conditions give native species a competitive advantage?
+# 3a. look at exotic percent cover vs depth of pool, by zone
+# 3b. look at native percent cover vs depth of pool, by zone
+
+# 4. Closer look at FEPE & POMO
+
+
+```
+
+
+```{r include = FALSE}
+
+# 0. Tidy up data
+
+## Retain only DATE, PRCP, TAVG, TMAX, TMIN for 2016-12 to 2018 in noaa_data
+noaa_data <- noaa %>%
+  select(DATE, PRCP, TAVG, TMAX, TMIN) %>% 
+  filter(DATE == "2016-12" | str_detect(DATE, "2017") | str_detect(DATE, "2018")) %>% 
+  mutate(DATE = paste(DATE, "1", sep="-" ))
+noaa_data$DATE = as.Date(noaa_data$DATE)
+
+## Separate "Replicate" label into Replicate_Zone and Replicate_Number, join with species metadata, convert month and year to "date" column
+np_percent_cover <- np_percent_cover_master %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3"))
+np_percent_cover <- full_join(np_percent_cover, metadata) %>% 
+  mutate(month_number = case_when(Month == "JANUARY" ~ 1, Month == "FEBRUARY" ~ 2, Month == "MARCH" ~ 3, Month == "APRIL" ~ 4, Month == "MAY" ~ 5, Month == "JUNE" ~ 6, Month == "JULY" ~ 7, Month == "AUGUST" ~ 8, Month == "SEPTEMBER" ~ 9, Month == "OCTOBER" ~ 10, Month == "NOVEMBER" ~ 11, Month == "DECEMBER" ~ 12)) %>% 
+  mutate(date = paste(Year, month_number, "1", sep="-" ))
+np_percent_cover$date = as.Date(np_percent_cover$date)
+
+## Convert np_2016_seedbank into tidy format, remove NAs, separate "Replicate" label into Replicate_Zone and Replicate_Number
+seedbank_2016 <- gather(np_2016_seedbank_master, key = "Species", value = "Count", -c(Plot, Replicate)) %>% 
+  na.omit(np_2016_seedbank_master) %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3")) %>% 
+  full_join(metadata)
+
+## Calculate total abundance of each species per Replicate for 2018 seed bank data, join to metadata
+np_seedbank_2018 <- np_2018_seed_bank_master %>% 
+  group_by(Plot, Replicate, Species) %>% 
+  summarize(Count = sum(Count)) %>% 
+  add_column(Year = 2018) %>% 
+  full_join(metadata)
+
+```
+
+# 1. How does species percent cover and diversity correlate with time since restoration?
+
+Hypothesis: We will see increased exotic species percent cover and diversity with increased time since restoration.
+
+# 1a. Total percent cover of exotics over time since restoration, by zone
+
+Results: Increase in total exotic percent cover over time, driven by WT1, WT2, PH1, & especially RT.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1a. Compare total % cover of exotics (sum of % cover of each species) over time since restoration, for May
+
+
+## Create new data frame with creation year of each pool
+creation_year_df <- data.frame(Plot = c("PH1", "TP", "RT", "MS", "WT1", "WT2", "CS"), Creation_Year = c("2010", "2012", "2012", "2015", "2014", "2014", "2013"))
+
+## Calculate total exotic % cover in Feb/May 2017/2018, add time since restoration column
+np_total_percent_cover_time_cover_exotic <- np_percent_cover %>%
+  filter(Native_Status == "E") %>% 
+  filter(month_number >2, month_number<6) %>% 
+  group_by(date, Year, Plot, Replicate_Zone) %>% 
+  summarize(total = sum(percent_cover)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year)
+  
+## Scatter plot of total % cover vs. time since, by zone
+total_exotic_time_scatter <- np_total_percent_cover_time_cover_exotic %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = total, group = Plot)) +
+  geom_point(color = "darkolivegreen3", size = 2) +
+  geom_smooth(method = lm, aes(x = Time_Since, group = NULL), se = TRUE, size = .5) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Total Percent Cover of Exotics, by Zone", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "More variation as time increases; WT1, WT2, PH1, & esp RT increased") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(-20, 85)) +
+  theme(text = element_text(size=20))
+total_exotic_time_scatter
+
+## Moving average of total % cover vs. time since, by zone
+total_exotic_time_line <- np_total_percent_cover_time_cover_exotic %>% 
+  group_by(Time_Since, Replicate_Zone) %>% 
+  summarize(
+    mean = mean(total),
+    se = se(total)
+  ) %>% 
+  ggplot(aes(x = Time_Since, y = mean)) +
+  geom_point() +
+  geom_line() +
+  geom_errorbar(aes(ymin = mean-se, ymax = mean+se)) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Total Percent Cover of Exotics, by Zone", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "Esp transition and upland zone increases") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0))
+total_exotic_time_line
+
+### Calculate lm(), R^2 of exotic % cover over time for T and U
+np_total_percent_cover_time_cover_exotic_c <- np_total_percent_cover_time_cover_exotic %>% 
+  filter(Replicate_Zone == "C")
+np_total_percent_cover_time_cover_exotic_t <- np_total_percent_cover_time_cover_exotic %>% 
+  filter(Replicate_Zone == "T")
+np_total_percent_cover_time_cover_exotic_u <- np_total_percent_cover_time_cover_exotic %>% 
+  filter(Replicate_Zone == "U")
+exotic_time_c_lm <- lm(np_total_percent_cover_time_cover_exotic_c$total ~ np_total_percent_cover_time_cover_exotic_c$Time_Since)
+# summary(exotic_time_c_lm)
+#total = .2167(Time_Since) + 1.4333, R^2 = .07682, p = 4703
+exotic_time_t_lm <- lm(np_total_percent_cover_time_cover_exotic_t$total ~ np_total_percent_cover_time_cover_exotic_t$Time_Since)
+# summary(exotic_time_t_lm)
+#total = 6.881(Time_Since) - 14.875, R^2 = .3982, p < .01
+exotic_time_u_lm <- lm(np_total_percent_cover_time_cover_exotic_u$total ~ np_total_percent_cover_time_cover_exotic_u$Time_Since)
+# summary(exotic_time_u_lm)
+#total = 7.737(Time_Since) - 16.120, R^2 = .492, p<.01
+
+### Check diagnostic graphs
+# plot(exotic_time_t_lm)
+# plot(exotic_time_u_lm)
+#diagnostic graphs look pretty good
+
+### Calculate Pearson's r
+# cor.test(np_total_percent_cover_time_cover_exotic_t$Time_Since, np_total_percent_cover_time_cover_exotic_t$total)
+#r = .67, medium correlation
+# cor.test(np_total_percent_cover_time_cover_exotic_u$Time_Since, np_total_percent_cover_time_cover_exotic_u$total)
+#r = .60, medium correlation
+
+## Kruskal-Wallis
+
+### Check for normality
+exotic_time_t_hist <- ggplot(np_total_percent_cover_time_cover_exotic_t) +
+  geom_histogram(aes(x = total))
+#exotic_time_t_hist
+####not normal
+exotic_time_u_hist <- ggplot(np_total_percent_cover_time_cover_exotic_u) +
+  geom_histogram(aes(x = total))
+#exotic_time_u_hist
+####not normal
+
+## Kruskal-Wallis test
+exotic_time_t_kw <- kruskal.test(total ~ Time_Since, data = np_total_percent_cover_time_cover_exotic_t)
+#exotic_time_t_kw
+###p = .07, median total exotic % cover not different over time
+exotic_time_u_kw <- kruskal.test(total ~ Time_Since, data = np_total_percent_cover_time_cover_exotic_u)
+#exotic_time_u_kw
+###p = .06, median total exotic % cover not different over time
+
+```
+
+
+# 1b. Exotic species richness over time, by zone
+
+Results: Increase in exotic species richness over time, especially in the upland zone.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1b. Compare April/May species richness of exotic species over time, by zone
+
+## Calculate exotic species richness in Feb/May 2017/2018, add time since restoration column
+np_45_richness_time_exotic <- np_percent_cover %>%
+  filter(Native_Status == "E") %>% 
+  filter(month_number >2, month_number<6) %>% group_by(Replicate_Zone, Year, Month, Plot) %>% 
+  summarize(richness = length(Species_Full_Name)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year)
+
+## Scatter plot of species richness vs. time since
+exotic_richness_time_45_scatter <- np_45_richness_time_exotic %>% 
+  ggplot(aes(x = Time_Since, y = richness, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(x = Time_Since, group = NULL), se = TRUE, size = .5) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Exotic Species Richness", x = "Time Since Restoration (years)", y = "Species Richness", caption = "High variation; WT2, PH1, & esp WT1 and RT increased") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,12))
+exotic_richness_time_45_scatter
+
+
+## Scatter plot of species richness vs. time since, using averages b/t quadrats
+exotic_richness_time_scatter <- np_45_richness_time_exotic %>% 
+  group_by(Plot, Time_Since, Replicate_Zone) %>% 
+  summarize(mean = mean(richness)) %>% 
+  ggplot(aes(x = Time_Since, y = mean, group = Plot)) +
+  geom_point(color = "darkolivegreen3", size = 2) +
+  geom_smooth(method = lm, aes(x = Time_Since, group = NULL), se = TRUE, size = .5) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Exotic Species Richness", x = "Time Since Restoration (years)", y = "Species Richness", caption = "High variation; WT2, PH1, & esp WT1 and RT increased") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(-5,17)) +
+  theme(text = element_text(size=20))
+exotic_richness_time_scatter
+
+## Moving average of species richness vs. time since
+exotic_richness_time_45_line <- np_45_richness_time_exotic %>%
+  group_by(Replicate_Zone, Time_Since) %>% 
+  summarize(
+    mean = mean(richness),
+    se = se(richness)) %>% 
+  ggplot(aes(x = Time_Since, y = mean)) +
+  geom_point() +
+  geom_line() +
+  geom_errorbar(aes(ymin = mean-se, ymax = mean+se, width = .5)) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Exotic Species Richness", x = "Time Since Restoration (years)", y = "Average Species Richness", caption = "Esp upland zone increases") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,12))
+exotic_richness_time_45_line
+
+### Calculate lm(), R^2 of exotic richness over time
+time_exotic_richness_c <- np_45_richness_time_exotic %>% 
+  filter(Replicate_Zone == "C")
+time_exotic_richness_t <- np_45_richness_time_exotic %>% 
+  filter(Replicate_Zone == "T")
+time_exotic_richness_u <- np_45_richness_time_exotic %>% 
+  filter(Replicate_Zone == "U")
+time_exotic_richness_c_lm <- lm(time_exotic_richness_c$richness ~ time_exotic_richness_c$Time_Since)
+# summary(time_exotic_richness_c_lm)
+#richness = .2167(Time_Since) + 1.433, R^2 = .07682, p = .4703
+time_exotic_richness_t_lm <- lm(time_exotic_richness_t$richness ~ time_exotic_richness_t$Time_Since)
+# summary(time_exotic_richness_t_lm)
+#richness = 1.060(Time_Since) + 1.296, R^2 = .292, p < .01
+time_exotic_richness_u_lm <- lm(time_exotic_richness_u$richness ~ time_exotic_richness_u$Time_Since)
+# summary(time_exotic_richness_u_lm)
+#richness = 1.7312(Time_Since) - .2348, R^2 = .4404, p < .01
+
+### Check diagnostic graphs
+# plot(time_exotic_richness_t_lm)
+# plot(time_exotic_richness_u_lm)
+#diagnostic graphs look pretty good
+
+### Calculate Pearson's r
+# cor.test(time_exotic_richness_t$Time_Since, time_exotic_richness_t$richness)
+#r = .42, medium correlation
+# cor.test(time_exotic_richness_u$Time_Since, time_exotic_richness_u$richness)
+#r = .60, medium correlation
+
+## Kruskal-Wallis
+
+### Check for normality
+exotic_richness_t_hist <- ggplot(time_exotic_richness_t) +
+  geom_histogram(aes(x = richness))
+#exotic_richness_t_hist
+####not normal
+exotic_richness_u_hist <- ggplot(time_exotic_richness_u) +
+  geom_histogram(aes(x = richness))
+#exotic_richness_u_hist
+####not normal
+
+## Kruskal-Wallis test
+exotic_richness_time_t_kw <- kruskal.test(richness ~ Time_Since, data = time_exotic_richness_t)
+#exotic_richness_time_t_kw
+###p = .2435, medians not different
+exotic_richness_time_u_kw <- kruskal.test(richness ~ Time_Since, data = time_exotic_richness_u)
+#exotic_richness_time_u_kw
+###p = .05, medians not different
+
+```
+
+
+
+# 1c. Total percent cover of natives over time since restoration, by zone
+
+Results: Increase in total native percent cover over time (but peak in years 3-5), driven by WT1, MS, & CS.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1c. Compare total % cover of natives (sum of % cover of each species) over time since restoration, for April/May
+
+## Calculate total native % cover in April/May months, add time since restoration column
+np_total_percent_cover_time_cover_native <- np_percent_cover %>%
+  filter(Native_Status == "N") %>% 
+  filter(month_number >3, month_number<6) %>% 
+  group_by(date, Year, Plot, Replicate_Zone) %>% 
+  summarize(total = sum(percent_cover)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year)
+  
+## Scatter plot of total % cover vs. time since, by zone
+total_native_time_scatter <- np_total_percent_cover_time_cover_native %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = total, group = Plot)) +
+  geom_point(color = "darkolivegreen", size = 3) +
+  geom_smooth(method = lm, aes(x = Time_Since, group = NULL), se = TRUE, size = .5) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Total Percent Cover of Natives, by Zone", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "More variation in years 3-5; WT2, PH1, TP, RT increased") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 130))
+total_native_time_scatter
+
+## Moving average of total % cover vs. time since, by zone
+total_native_time_line <- np_total_percent_cover_time_cover_native %>% 
+  group_by(Time_Since, Replicate_Zone) %>% 
+  summarize(
+    mean = mean(total),
+    se = se(total)
+  ) %>% 
+  drop_na() %>% 
+  ggplot(aes(x = Time_Since, y = mean)) +
+  geom_point() +
+  geom_line() +
+  geom_errorbar(aes(ymin = mean-se, ymax = mean+se)) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Total Percent Cover of Natives, by Zone", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "All zones increase") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0))
+total_native_time_line
+
+```
+
+# 1d. Native species richness over time, by zone
+
+Results: Native species richness increases over time.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1e. Compare April/May species richness of native species over time
+
+## Calculate native species richness in April/May 2017/2018, add time since restoration column
+np_45_richness_time_native <- np_percent_cover %>%
+  filter(Native_Status == "N") %>% 
+  filter(month_number >3, month_number<6) %>% group_by(Replicate_Zone, Year, Month, Plot) %>% 
+  summarize(richness = length(Species_Full_Name)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year)
+
+## Scatter plot of species richness vs. time since
+native_richness_time_45_scatter <- np_45_richness_time_native %>% 
+  ggplot(aes(x = Time_Since, y = richness, group = Plot)) +
+  geom_point(color = "darkolivegreen", size = 3) +
+  geom_smooth(method = lm, aes(x = Time_Since, group = NULL), se = TRUE, size = .5) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Native Species Richness", x = "Time Since Restoration (years)", y = "Species Richness", caption = "High variation; all increased; \n species richness highest in transition zone") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,12))
+native_richness_time_45_scatter
+
+## Moving average of species richness vs. time since
+native_richness_time_45_line <- np_45_richness_time_native %>%
+  group_by(Year, Replicate_Zone, Time_Since) %>% 
+  summarize(
+    mean = mean(richness),
+    se = se(richness)) %>% 
+  ggplot(aes(x = Time_Since, y = mean)) +
+  geom_point() +
+  geom_line() +
+  geom_errorbar(aes(ymin = mean-se, ymax = mean+se, width = .5)) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Native Species Richness", x = "Time Since Restoration (years)", y = "Species Richness", caption = "High variation; all increased") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,12))
+native_richness_time_45_line
+
+### Calculate lm(), R^2 of native richness over time
+#time_native_richness_lm <- lm(np_richness_time_native$richness ~ np_richness_time_native$Time_Since)
+# summary(time_native_richness_lm)
+#richness = -.38(Time_Since) +21.34, R^2 = .0293, p = .5585
+
+### Check diagnostic graphs
+# plot(time_native_richness_lm)
+#diagnostic graphs look pretty good
+
+### Calculate Pearson's r
+# cor.test(np_richness_time_native$Time_Since, np_richness_time_native$richness)
+#r = -.17, weak correlation
+
+## Kruskal-Wallis
+
+### Check for normality
+#native_richness_hist <- ggplot(np_richness_time_native) +
+  geom_histogram(aes(x = richness))
+#native_richness_hist
+####not normal
+
+## Kruskal-Wallis test
+#native_richness_time_kw <- kruskal.test(richness ~ Time_Since, data = np_richness_time_native)
+#native_richness_time_kw
+###p = .8629, median native richness not different over time
+
+```
+
+# 1e. Native:Exotic over time, by zone
+
+Results:
+
+```{r echo = FALSE, message = FALSE, warning= FALSE}
+
+# 1e. compare Native:Exotic over time, by zone
+
+## Calculate mean ratio of total native % cover to total exotic % cover in each month, by zone
+np_ratio <- np_percent_cover %>%
+  group_by(date, Month, Plot, Replicate_Zone, Native_Status) %>% 
+  summarize(total = sum(percent_cover)) %>% 
+  drop_na(Native_Status, Replicate_Zone) %>% 
+  spread(Native_Status, total) %>% 
+  mutate(ratio = N/E) %>% 
+  mutate_all(funs(ifelse(is.na(.), 1, .))) %>% 
+  group_by(date, Month, Replicate_Zone) %>% 
+  summarize(
+    mean = mean(ratio),
+    se = se(ratio))
+
+## Moving average of N:E in each month, by zone
+np_ratio_month_line <- np_ratio %>% 
+  ggplot(aes(x = date, y = mean)) +
+  geom_point() +
+  geom_line() +
+  geom_errorbar(aes(ymin = mean-se, ymax = mean+se)) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Ratio of Total Native Cover to Total Exotic Cover, by month", x = "Date (YYYY-MM)", y = "N/E", caption = "Overall higher in 2017; \n Central: high in July/low in August in 2017, high in April/low in August 2018; \n Transition: high in June/low in Sept in 2017, high in May/low in April 2018; \n Upland: high in July/low in Sept in 2017, high in April/low in May in 2018") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_x_date(breaks = waiver(), date_breaks = "1 month")
+np_ratio_month_line
+
+## Scatter plot of N:E over time since, by zone, using Feb/May
+np_ratio_time_scatter <- np_percent_cover %>%
+  filter(month_number >2, month_number<6) %>% 
+  group_by(date, Month, Year, Plot, Replicate_Zone, Native_Status) %>% 
+  summarize(total = sum(percent_cover)) %>% 
+  drop_na(Native_Status, Replicate_Zone) %>% 
+  spread(Native_Status, total) %>% 
+  mutate(ratio = N/E) %>% 
+  mutate_all(funs(ifelse(is.na(.), 1, .))) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  ggplot(aes(x = Time_Since, y = ratio)) +
+  geom_point(color = "slategray", size = 2) +
+  geom_smooth(method = lm, aes(x = Time_Since, group = NULL), se = TRUE, size = .5) +
+  facet_wrap(~Replicate_Zone) +
+  theme_classic() +
+  labs(title = "Ratio of Total Native Cover to Total Exotic Cover, over time", x = "Time Since Restoration (years)", y = "Ratio \n (Native Percent Cover:Exotic Percent Cover)", caption = "Ratio decreasing over time in upland zone") +
+  theme(text = element_text(size=20))
+np_ratio_time_scatter
+
+## Moving average of N:E over time since, by zone
+np_ratio_time_line <- np_percent_cover %>%
+  filter(month_number >3, month_number<6) %>% 
+  group_by(date, Month, Year, Plot, Replicate_Zone, Native_Status) %>% 
+  summarize(total = sum(percent_cover)) %>% 
+  drop_na(Native_Status, Replicate_Zone) %>% 
+  spread(Native_Status, total) %>% 
+  mutate(ratio = N/E) %>% 
+  mutate_all(funs(ifelse(is.na(.), 1, .))) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  group_by(Time_Since, Replicate_Zone) %>% 
+  summarize(
+    mean = mean(ratio),
+    se = se(ratio)
+  ) %>% 
+  ggplot(aes(x = Time_Since, y = mean)) +
+  geom_point() +
+  geom_line() +
+  geom_errorbar(aes(ymin = mean-se, ymax = mean+se)) +
+  facet_wrap(~Replicate_Zone) +
+  theme_classic() +
+  labs(title = "Ratio of Total Native Cover to Total Exotic Cover, over time", x = "Time Since Restoration (years)", y = "Native/Exotic", caption = "Ratio decreasing over time in upland zone")
+np_ratio_time_line
+
+### Calculate lm(), R^2 of ratio over time
+ratio_time_c <- np_percent_cover %>%
+  filter(month_number >2, month_number<6) %>% 
+  group_by(date, Month, Year, Plot, Replicate_Zone, Native_Status) %>% 
+  summarize(total = sum(percent_cover)) %>% 
+  drop_na(Native_Status, Replicate_Zone) %>% 
+  spread(Native_Status, total) %>% 
+  mutate(ratio = N/E) %>% 
+  mutate_all(funs(ifelse(is.na(.), 1, .))) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  filter(Replicate_Zone == "C")
+ratio_time_t <- np_percent_cover %>%
+  filter(month_number >2, month_number<6) %>% 
+  group_by(date, Month, Year, Plot, Replicate_Zone, Native_Status) %>% 
+  summarize(total = sum(percent_cover)) %>% 
+  drop_na(Native_Status, Replicate_Zone) %>% 
+  spread(Native_Status, total) %>% 
+  mutate(ratio = N/E) %>% 
+  mutate_all(funs(ifelse(is.na(.), 1, .))) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  filter(Replicate_Zone == "T")
+ratio_time_u <- np_percent_cover %>%
+  filter(month_number >2, month_number<6) %>% 
+  group_by(date, Month, Year, Plot, Replicate_Zone, Native_Status) %>% 
+  summarize(total = sum(percent_cover)) %>% 
+  drop_na(Native_Status, Replicate_Zone) %>% 
+  spread(Native_Status, total) %>% 
+  mutate(ratio = N/E) %>% 
+  mutate_all(funs(ifelse(is.na(.), 1, .))) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  filter(Replicate_Zone == "U")
+ratio_time_c_lm <- lm(ratio_time_c$ratio ~ ratio_time_c$Time_Since)
+# summary(ratio_time_c_lm)
+#ratio = -17.11(Time_Since) + 144.65, R^2 = .1272, p = .16
+ratio_time_t_lm <- lm(ratio_time_t$ratio ~ ratio_time_t$Time_Since)
+# summary(ratio_time_t_lm)
+#ratio = -4.099(Time_Since) + 46.308, R^2 = .02474, p = .3456
+ratio_time_u_lm <- lm(ratio_time_u$ratio ~ ratio_time_u$Time_Since)
+# summary(ratio_time_u_lm)
+#ratio = -4.002(Time_Since) + 38.393, R^2 = .03522, p = .2592
+
+### Check diagnostic graphs
+# plot(ratio_time_t_lm)
+# plot(ratio_time_u_lm)
+#diagnostic graphs look pretty good
+
+### Calculate Pearson's r
+# cor.test(ratio_time_t$Time_Since, ratio_time_t$ratio)
+#r = -.15, weak correlation
+# cor.test(ratio_time_u$Time_Since, ratio_time_u$ratio)
+#r = -.16, weak correlation
+
+## Kruskal-Wallis
+
+### Check for normality
+ratio_time_t_hist <- ggplot(ratio_time_t) +
+  geom_histogram(aes(x = ratio))
+#ratio_time_t_hist
+####not normal
+ratio_time_u_hist <- ggplot(ratio_time_u) +
+  geom_histogram(aes(x = ratio))
+#ratio_time_u_hist
+####not normal
+
+## Kruskal-Wallis test
+ratio_time_t_kw <- kruskal.test(ratio ~ Time_Since, data = ratio_time_t)
+#ratio_time_t_kw
+###p = .087, median native richness not different over time
+ratio_time_u_kw <- kruskal.test(ratio ~ Time_Since, data = ratio_time_u)
+#ratio_time_u_kw
+###p = .036, median native richness not different over time
+
+```
+
+
+# 2. Is seed bank contributing to increase in exotics?
+
+Hypothesis: Exotic species in the seed bank will contribute to exotic percent cover.
+
+# 2a. Exotic species in 2016 seed bank vs. exotic species in April/May 2017, by pool, by zone
+
+Results: In the upland zone, more exotics species contributing to exotic percent cover than those that are in the seed bank
+
+```{r echo = FALSE, message = FALSE, warning= FALSE}
+
+# 2a. compare exotic species in 2016 seed bank vs. exotic species in April/May 2017, by pool, by zone
+  
+## Add Year column to seedbank_2016, add presence/absence column
+seedbank_2016_pa <- seedbank_2016 %>%
+  add_column(Year = 2016) %>% 
+  group_by(Year, Plot, Replicate_Zone, Species_Full_Name, Native_Status) %>% 
+  summarize(
+    max = max(Count)
+  ) %>% 
+  filter(max>0) %>% 
+  add_column(present = 1)
+
+## Add presence/absence column to 2017 percent cover data, join to 2016 seed bank
+pa_2016_2017 <- np_percent_cover %>% 
+  filter(Year == "2017") %>% 
+  group_by(Year, Plot, Replicate_Zone, Species_Full_Name, Native_Status) %>% 
+  summarize(
+    max = max(percent_cover)
+  ) %>% 
+  add_column(present = 1) %>% 
+  full_join(seedbank_2016_pa) %>% 
+  na.omit()
+
+## Plot exotics in 2016 seed bank vs. 2017, by zone, for RT
+rt_exotic_pa <- pa_2016_2017 %>% 
+  filter(Native_Status == "E") %>% 
+  filter(Plot == "RT") %>% 
+  ggplot(aes(x = Species_Full_Name, y = present)) +
+  geom_col(aes(fill = as.factor(Year))) +
+  facet_wrap(~Replicate_Zone) +
+  scale_fill_manual(values = c("darkgreen", "chartreuse4"), label = c("2016 seed bank", "2017 monitoring"), name = "Year") +
+    labs(title = "RT: Exotic Species in Seed Bank vs. Monitoring", x = "Species", y = "Presence", caption = "More exotics coming up in upland zone than are in seed bank") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90))
+rt_exotic_pa
+
+# Scatter comparing 2016 vs 2017 presence/absence
+exotic_pa_scatter <- pa_2016_2017 %>% 
+  filter(Native_Status == "E") %>% 
+  spread(Year, present) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(sixteen = "2016") %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  ggplot(aes(x = sixteen, y = seventeen)) +
+  geom_jitter(aes(color = Species_Full_Name, shape = Plot)) +
+  facet_wrap(~Replicate_Zone) +
+  scale_fill_manual(values = c("darkgreen", "chartreuse4"), label = c("2016 seed bank", "2017 monitoring"), name = "Year") +
+    labs(title = "Exotic Species in Seed Bank vs. Monitoring", x = "Species", y = "Presence", caption = "More exotics coming up in upland zone than are in seed bank") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90))
+ggplotly(exotic_pa_scatter)
+
+
+# Plot % cover for seed bank + monitoring species
+exotic_pa_cover_both <- pa_2016_2017 %>% 
+  filter(Native_Status == "E") %>% 
+  spread(Year, present) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(sixteen = "2016") %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  mutate(both = seventeen + sixteen) %>% 
+  filter(both == 2) %>% 
+  ggplot(aes(y = max, x = Species_Full_Name)) +
+  geom_point(aes(color = Plot)) +
+  facet_wrap(~Replicate_Zone) +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 5)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90))
+exotic_pa_cover_both
+
+# Plot % cover for just monitoring species
+exotic_pa_cover <- pa_2016_2017 %>% 
+  filter(Native_Status == "E") %>% 
+  spread(Year, present) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(sixteen = "2016") %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  mutate(both = seventeen + sixteen) %>% 
+  filter(seventeen == 1) %>% 
+  filter(both == 1) %>% 
+  ggplot(aes(y = max, x = Species_Full_Name)) +
+  geom_point(aes(color = Plot)) +
+  facet_wrap(~Replicate_Zone) +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 45)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90))
+exotic_pa_cover
+
+
+```
+
+# 3. Closer look at FEPE and POMO
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+
+# POMO by month and zone, with NOAA data
+pomo <- np_percent_cover %>%
+  filter(Species_Full_Name == "Polypogon monospeliensis") %>% 
+  mutate(DATE = paste(Year, month_number, "1", sep="-" )) %>% 
+  group_by(DATE, Month, Plot, Replicate_Zone, Native_Status) %>% 
+  summarize(
+    mean = mean(percent_cover),
+    se = se(percent_cover))
+pomo$DATE = as.Date(pomo$DATE)
+                    
+pomo_avg <- pomo %>% 
+  drop_na(Native_Status, Replicate_Zone) %>% 
+  full_join(data.frame(DATE = seq.Date(from = min(fepe$DATE), to = max(fepe$DATE), by = "month"))) %>% 
+  full_join(noaa_data)  %>% 
+  filter(PRCP != "NA") %>% 
+  replace_na(., list(Native_Status = "N", Replicate_Zone = "C", total = 0)) %>% 
+  ggplot(aes(x = factor(DATE), y = mean)) +
+  geom_point(aes(y = mean)) +
+  geom_line(aes(y = mean)) +
+geom_line(aes(y = PRCP*10, color = "Precip (mm)", group = 1), lty = "twodash", color = "dodgerblue1")  +
+  geom_errorbar(aes(ymin = mean-se, ymax = mean+se)) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Polypogon monospeliensis, by month", x = "Date (YYYY-MM)", y = "Percent Cover", caption = "Peak in March/April in 2017; \n Peak in May-August in 2018") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90))
+pomo_avg
+
+# FEPE by month and zone
+fepe <- np_percent_cover %>%
+  filter(Species_Full_Name == "Festuca perennis") %>% 
+  mutate(DATE = paste(Year, month_number, "1", sep="-" )) %>% 
+  group_by(DATE, Month, Plot, Replicate_Zone, Native_Status) %>% 
+  summarize(
+    mean = mean(percent_cover),
+    se = se(percent_cover))
+fepe$DATE = as.Date(fepe$DATE)
+
+fepe_avg <- fepe %>% 
+  drop_na(Native_Status, Replicate_Zone) %>% 
+  full_join(data.frame(DATE = seq.Date(from = min(fepe$DATE), to = max(fepe$DATE), by = "month"))) %>% 
+  full_join(noaa_data)  %>% 
+  filter(PRCP != "NA") %>% 
+  replace_na(., list(Native_Status = "N", Replicate_Zone = "C", total = 0)) %>% 
+  ggplot(aes(x = factor(DATE), y = mean)) +
+  geom_point(aes(y = mean)) +
+  geom_line(aes(y = mean)) +
+geom_line(aes(y = PRCP*10, color = "Precip (mm)", group = 1), lty = "twodash", color = "dodgerblue1")  +
+  geom_errorbar(aes(ymin = mean-se, ymax = mean+se)) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Festuca perennis, by month", x = "Date (YYYY-MM)", y = "Percent Cover", caption = "Peak in Jan-April in 2017; \n Peak in Feb-May in 2018") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90))
+fepe_avg
+
+```
+
+
+
+# 4. Compare to Del Sol data
+
+```{r message = FALSE, echo = FALSE, warning = FALSE}
+
+# Plot Del Sol percent cover
+del_sol_cover <- del_sol %>% 
+  full_join(metadata) %>% 
+  drop_na(Plot) %>% 
+  group_by(Plot, Species_Full_Name, Native_Status) %>% 
+  summarize(
+    cover = mean(cover)
+  )
+
+del_sol_cover_scatter <- ggplot(del_sol_cover, aes(x = Species_Full_Name, y = cover)) +
+  geom_point(aes(color = Plot)) +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 70)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  facet_wrap(~Native_Status)
+del_sol_cover_scatter
+
+# Plot Del Sol vs. NP 2017 percent cover, using mean of each species
+del_sol_cover_col <-  np_percent_cover %>% 
+  filter(Year == "2017") %>% 
+  group_by(Year, Plot, Replicate_Zone, Species_Full_Name, Native_Status) %>% 
+  summarize(
+    cover = max(percent_cover)
+  ) %>% 
+  full_join(del_sol_cover) %>% 
+  drop_na(Native_Status) %>% 
+  ggplot(aes(x = reorder(Species_Full_Name, -cover), y = cover)) +
+  geom_col(aes(fill = as.factor(Year)), position = "dodge") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  facet_wrap(~Native_Status)
+del_sol_cover_col
+
+```

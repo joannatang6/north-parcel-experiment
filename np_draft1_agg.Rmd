@@ -1,0 +1,263 @@
+---
+title: "NP Draft 1: Aggregate all pools together"
+author: "Joanna Tang"
+date: "1/16/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include = FALSE}
+
+# Loading packages, read in data
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(vegan)
+library(car)
+library(RColorBrewer)
+library(reshape2)
+library(knitr)
+library(kableExtra)
+np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
+np_percent_cover_master <- read_csv("np_percent_cover.csv")
+metadata <- read_csv("metadata.csv")
+
+```
+
+```{r include = FALSE}
+
+# Tidy up data
+
+## Separate "Replicate" label into Replicate_Zone and Replicate_Number, join with species metadata, convert month and year to "date" column
+np_percent_cover <- np_percent_cover_master %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3"))
+np_percent_cover <- full_join(np_percent_cover, metadata) %>% 
+  mutate(month_number = case_when(Month == "JANUARY" ~ 1, Month == "FEBRUARY" ~ 2, Month == "MARCH" ~ 3, Month == "APRIL" ~ 4, Month == "MAY" ~ 5, Month == "JUNE" ~ 6, Month == "JULY" ~ 7, Month == "AUGUST" ~ 8, Month == "SEPTEMBER" ~ 9, Month == "OCTOBER" ~ 10, Month == "NOVEMBER" ~ 11, Month == "DECEMBER" ~ 12)) %>% 
+  mutate(date = paste(Year, month_number, "1", sep="-" ))
+np_percent_cover$date = as.Date(np_percent_cover$date)
+
+# Convert np_2016_seedbank into tidy format, remove NAs, separate "Replicate" label into Replicate_Zone and Replicate_Number
+seedbank_2016 <- gather(np_2016_seedbank_master, key = "Species", value = "Count", -c(Plot, Replicate)) %>% 
+  na.omit(np_2016_seedbank_master) %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3")) %>% 
+  full_join(metadata)
+
+
+```
+
+
+```{r include = FALSE}
+
+# Outline
+# 1. How does exotic species abundance and diversity correlate with time since restoration?
+# 1a. compare max % cover of each exotic species, 2017 vs 2018
+# 1b. compare max % cover of each exotic species, 2017 vs 2018, by zone
+
+#2. Do the invading exotic species exhibit a similar set of traits?
+# 2a. annual vs. perennial graphs of c to to t u
+# 2b. max % cover vs. % in seed bank
+# 2c. phenology
+# 2d. moisture regime
+
+```
+
+# 1. How does exotic species percent cover and diversity correlate with time since restoration?
+
+Hypothesis: We will see increased exotic species percent cover and diversity with increased time since restoration.
+
+# 1a. Total percent cover over time since restoration
+
+Results: Increase in total exotic percent cover over time.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1a. Compare total % cover of exotics (sum of max % cover of each species) over time since restoration
+
+
+## Create new data frame with creation year of each pool
+creation_year_df <- data.frame(Plot = c("PH1", "TP", "RT", "MS", "WT1", "WT2", "CS"), Creation_Year = c("2010", "2012", "2012", "2015", "2014", "2014", "2013"))
+
+## Add time since restoration column
+np_percent_cover_time_cover <- np_percent_cover %>%
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year, Plot) %>% 
+  summarize(total = sum(max)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year)
+  
+# Scatter plot of total % cover vs. time since
+max_exotic_time_scatter <- np_percent_cover_time_cover %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = total)) +
+  geom_point(aes(color = Plot)) +
+  geom_line(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(x = Time_Since), se = TRUE, size = .5) +
+  labs(title = "Total Percent Cover of Exotics", x = "Time Since Restoration", y = "Percent Cover", caption = "More variation as time increases; PH1, CS, TP decreased")
+max_exotic_time_scatter
+
+
+# Boxplot of total % cover vs. time since
+max_exotic_time_box <- np_percent_cover_time_cover %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = total)) +
+  geom_boxplot(width = .5) +
+  geom_jitter(aes(color = Plot), width = .1) +
+  labs(title = "Total Percent Cover of Exotics", x = "Time Since Restoration", y = "Percent Cover", caption = "More variation as time increases; PH1, CS, TP decreased")
+max_exotic_time_box
+
+```
+
+
+## 1b. Species richness over time since restoration
+
+Results: Increase in species richness over time
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1a. Compare species richness over time since restoration
+
+## Add time since restoration column
+np_percent_cover_time_richness <- np_percent_cover %>%
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year, Plot) %>% 
+  summarize(richness = length(max)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year)
+  
+
+## Scatter plot of species richness vs. time since
+richness_time_scatter <- np_percent_cover_time_richness %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = richness)) +
+  geom_point(aes(color = Plot)) +
+  geom_line(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(x = Time_Since), se = TRUE, size = .5) +
+  labs(title = "Species Richness of Exotics", x = "Time Since Restoration", y = "Species Richness", caption = "More variation as time increases; PH1, CS, MS decreased")
+richness_time_scatter
+
+
+# Boxplot of species richness vs. time since
+richness_time_box <- np_percent_cover_time_richness %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = richness)) +
+  geom_boxplot(width = .5) +
+  geom_jitter(aes(color = Plot), width = .1) +
+  labs(title = "Species Richness of Exotics", x = "Time Since Restoration", y = "Species Richness")
+richness_time_box
+
+```
+
+## 1c. Grouped by zone
+
+Results: Transition and Upland zones increased in exotic species by the most.
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+# 1c. Compare total % cover of exotic species (sum of max % cover of each species) and species richness over time since by zone
+
+## Column graph of total % cover vs. time since by zone
+max_exotic_time_zone_col <- np_percent_cover %>%
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot, Replicate_Zone) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year, Plot, Replicate_Zone) %>% 
+  summarize(total = sum(max),
+            richness = length(max)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  ggplot(aes(x = Replicate_Zone)) +
+  geom_col(aes(y = total, fill = as.factor(Time_Since)), position = "dodge") +
+  labs(title = "Total Percent Cover of Exotics", x = "Zone", y = "Percent Cover", caption = "Transition and Upland zones increased much more")
+max_exotic_time_zone_col
+
+
+## Column graph of species richness vs. time since by zone
+richness_time_zone_col <- np_percent_cover %>%
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot, Replicate_Zone) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year, Plot, Replicate_Zone) %>% 
+  summarize(total = sum(max),
+            richness = length(max)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  ggplot(aes(x = Replicate_Zone)) +
+  geom_col(aes(y = richness, fill = as.factor(Time_Since)), position = "dodge") +
+  labs(title = "Species Richness of Exotics", x = "Zone", y = "Species Richness", caption = "Transition zone increased most")
+richness_time_zone_col
+
+```
+
+
+# 2. Do the invading exotic species exhibit a similar set of traits?
+
+## 2a. 2016 Seed Bank vs. 2017 Percent Cover
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+#2a. Compare % in 2016 seed bank vs. max % cover in 2017 of each exotic species, grouped by time since restoraitn
+
+## Mean % count of each exotic species
+seed_bank_summary <- seedbank_2016 %>%
+  filter(Native_Status == "E") %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = 2017 - Creation_Year) %>% 
+  group_by(Species_Full_Name, Plot, Time_Since) %>% 
+  summarize(mean = mean(Count))
+
+## Scatter plot of mean count in 2016 seed bank vs. max % cover in 2017 of each exotic species, colored by time since restoration
+seed_bank_cover_scatter <- np_percent_cover %>%
+  filter(Native_Status == "E", Year == 2017) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = 2017 - Creation_Year) %>% 
+  group_by(Species_Full_Name, Plot, Time_Since) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Plot, Species_Full_Name, Time_Since) %>% 
+  summarize(total = sum(max)) %>% 
+  full_join(seed_bank_summary) %>% 
+  filter(Plot != "NA") %>% 
+  mutate_all(funs(replace(., is.na(.), 0))) %>% 
+  ggplot(aes(x = mean, y = total)) +
+  geom_point(aes(color = Time_Since)) +
+  labs(title = "2016 Exotic Seed Bank vs. 2017 Exotic Percent Cover", x = "Abundance in seed bank", y = "Percent Cover")
+seed_bank_cover_scatter
+
+
+```
+
+## 2b. Max exotic percent cover vs. pool depth
+
+```{r}
+
+depth_df <- data.frame(depth = c("12", "13", "13", "12", "17.75", "13", "15.5", "12", "13", "13", "12", "17.75", "13", "15.5"), Plot = c("CS", "MS", "PH1", "RT", "TP", "WT1", "WT2", "CS", "MS", "PH1", "RT", "TP", "WT1", "WT2"), total = np_percent_cover_depth$total)
+
+np_percent_cover_depth <- np_percent_cover %>%
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year, Plot) %>% 
+  summarize(total = sum(max)) %>% 
+  full_join(depth_df)
+  
+## Scatter plot of total % cover vs. time since
+depth_exotic_scatter <- depth_df %>% 
+  ggplot(aes(x = as.numeric(depth), y = total, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_line(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(group = NULL), size = .2) +
+  labs(title = "Total Percent Cover of Exotics", x = "Depth of Pool", y = "Percent Cover", caption = "Deeper pools have less exotics")
+depth_exotic_scatter
+
+```
+

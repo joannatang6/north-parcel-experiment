@@ -1,0 +1,527 @@
+---
+title: "Exploratory Graphs"
+author: "Joanna Tang"
+date: "1/16/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r include = FALSE}
+
+# Loading packages, read in data
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(vegan)
+library(car)
+library(RColorBrewer)
+library(reshape2)
+library(knitr)
+library(kableExtra)
+np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
+np_percent_cover_master <- read_csv("np_percent_cover.csv")
+metadata <- read_csv("metadata.csv")
+
+```
+
+```{r include = FALSE}
+
+# Tidy up data
+
+## Separate "Replicate" label into Replicate_Zone and Replicate_Number, join with species metadata, convert month and year to "date" column
+np_percent_cover <- np_percent_cover_master %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3"))
+np_percent_cover <- full_join(np_percent_cover, metadata) %>% 
+  mutate(month_number = case_when(Month == "JANUARY" ~ 1, Month == "FEBRUARY" ~ 2, Month == "MARCH" ~ 3, Month == "APRIL" ~ 4, Month == "MAY" ~ 5, Month == "JUNE" ~ 6, Month == "JULY" ~ 7, Month == "AUGUST" ~ 8, Month == "SEPTEMBER" ~ 9, Month == "OCTOBER" ~ 10, Month == "NOVEMBER" ~ 11, Month == "DECEMBER" ~ 12)) %>% 
+  mutate(date = paste(Year, month_number, "1", sep="-" ))
+np_percent_cover$date = as.Date(np_percent_cover$date)
+
+# Convert np_2016_seedbank into tidy format, remove NAs, separate "Replicate" label into Replicate_Zone and Replicate_Number
+seedbank_2016 <- gather(np_2016_seedbank_master, key = "Species", value = "Count", -c(Plot, Replicate)) %>% 
+  na.omit(np_2016_seedbank_master) %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3"))
+
+
+```
+
+
+```{r include = FALSE}
+
+# Outline
+# 1. How does exotic species abundance and diversity correlate with time since restoration?
+# 1a. compare max % cover of each exotic species, 2017 vs 2018
+# 1b. compare mean % cover of each exotic species, 2017 vs 2018
+# 1c. compare max % cover of each exotic species, 2017 vs 2018, by pool
+# 1d. compare max % cover of each exotic species, 2017 vs 2018, by zone
+
+#2. Do the invading exotic species exhibit a similar set of traits?
+
+# 2a. annual vs. perennial graphs of c to to t u
+# 2b. max % cover vs. % in seed bank
+# 2c. phenology
+# 2d. moisture regime
+
+```
+
+# 1. How does exotic species abundance and diversity correlate with time since restoration?
+
+Hypothesis: We will see increased exotic species abundance and diversity with increased time since restoration.
+
+## 1a. 2017 vs. 2018 Maximum Percent Cover in All Pools
+
+Results: Higher percent cover and species richness in 2018 than in 2017.
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+# 1a. Compare max % cover of each exotic species, 2017 vs 2018
+
+## Table of 2017 vs. 2018 total max percent cover and species richness
+max_exotic_table <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year) %>% 
+  summarize(
+    Max_Total_Percent_Cover = sum(max),
+    Species_Richness = length(max)
+  ) %>% 
+  kable()  %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"))
+max_exotic_table
+
+# Exploratory histogram
+max_exotic_hist <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  ggplot(aes(x = max)) +
+  geom_histogram() +
+  labs(title = "Maximum Percent Cover of Exotics", x = "Percent Cover", y = "# Species")
+#max_exotic_hist
+#skewed right -- lots of species with low % cover
+  
+# Boxplot of 2017 vs 2018 total % cover (sum of max % cover of each exotic species)
+max_exotic_box <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year, Plot) %>% 
+  summarize(total = sum(max)) %>% 
+  ggplot(aes(x = as.factor(Year), y = total)) +
+  geom_boxplot(width = .5) +
+  geom_jitter(aes(color = Plot), width = .1) +
+  labs(title = "Maximum Percent Cover of Exotics", x = "Year", y = "Percent Cover", caption = "More variation in 2018: RT much higher, but CS, MS, and TP are actually lower in 2018")
+max_exotic_box
+
+# 1b. Compare max % cover of each exotic species, 2017 vs 2018, by pool
+
+## Column graph of 2017 vs. 2018 total max percent cover by pool
+pool_max_exotic_col <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Plot, Year) %>% 
+  summarize(
+    Max_Total_Percent_Cover = sum(max),
+    Species_Richness = length(max)
+  ) %>% 
+  ggplot(aes(x = Plot)) +
+  geom_col(aes(y = Max_Total_Percent_Cover, fill = as.factor(Year)), position = "dodge") +
+  labs(title = "Maximum Percent Cover of Exotics", x = "Pool", y = "Percent Cover", caption = "Only PH1, RT, WT1, WT2 increased; CS, MS, TP decreased")
+pool_max_exotic_col
+
+# Boxplot of 2017 vs 2018 species richness
+richness_box <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year, Plot) %>% 
+  summarize(richness = length(max)) %>% 
+  ggplot(aes(x = as.factor(Year), y = richness)) +
+  geom_boxplot(width = .5) +
+  geom_jitter(aes(color = Plot), width = .1) +
+  labs(title = "Species Richness of Exotics", x = "Year", y = "Species Richness", caption = "Also more variation in 2018, but only MS is lower in 2018")
+richness_box
+
+## Column graph of 2017 vs. 2018 species richness by pool
+pool_richness_col <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot, Replicate_Zone) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Plot, Year) %>% 
+  summarize(
+    Max_Total_Percent_Cover = sum(max),
+    Species_Richness = length(max)
+  ) %>% 
+  ggplot(aes(x = Plot)) +
+  geom_col(aes(y = Species_Richness, fill = as.factor(Year)), position = "dodge") +
+  labs(title = "Species Richness", x = "Pool", y = "Species Richness", caption = "Only PH1, RT, WT1, WT2 increased; CS, MS decreased while TP stayed the same despite decreased % cover")
+pool_richness_col
+
+```
+
+## 1a. 2017 vs. 2018 Maximum Percent Cover in All Pools
+
+Results: Higher percent cover and species richness in 2018 than in 2017.
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+# 1a. Compare max % cover of each exotic species, 2017 vs 2018
+
+## Table of 2017 vs. 2018 total max percent cover and species richness
+max_exotic_table <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year) %>% 
+  summarize(
+    Max_Total_Percent_Cover = sum(max),
+    Species_Richness = length(max)
+  ) %>% 
+  kable()  %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+max_exotic_table
+
+# Exploratory histogram
+max_exotic_hist <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  ggplot(aes(x = max)) +
+  geom_histogram() +
+  labs(title = "Maximum Percent Cover of Exotics", x = "Percent Cover", y = "# Species")
+max_exotic_hist
+  
+# Boxplot of 2017 vs 2018 maximum % cover of each exotic species
+max_exotic_box_by_sp <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  ggplot(aes(x = as.factor(Year), y = max)) +
+  geom_boxplot() +
+  geom_jitter(width = .1, alpha = .4) +
+  labs(title = "Maximum Percent Cover of Exotics", x = "Year", y = "Percent Cover")
+max_exotic_box_by_sp
+#skewed down -- lots of species with low % cover
+
+# Column graph of 2017 vs 2018 total % cover of exotic species (sum of max % cover of each exotic species)
+max_exotic_col <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  ggplot(aes(x = as.factor(Year), y = max)) +
+  geom_col() +
+  labs(title = "Total Percent Cover of Exotics", x = "Year", y = "Percent Cover")
+max_exotic_col
+#shows same thing as table -- total % cover of exotics increasing
+
+```
+
+
+
+## 1b. 2017 vs. 2018 Mean Percent Cover in All Pools
+
+Results: Higher percent cover and species richness in 2018 than in 2017.
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+# 1b. Compare mean % cover of each exotic species, 2017 vs 2018
+
+## Table of 2017 vs. 2018 total mean percent cover and species richness
+mean_exotic_table <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(mean = mean(percent_cover)) %>% 
+  group_by(Year) %>% 
+  summarize(
+    Mean_Total_Percent_Cover = sum(mean),
+    Species_Richness = length(mean)
+  ) %>% 
+  kable() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+mean_exotic_table
+
+mean_exotic_hist <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(mean = mean(percent_cover)) %>% 
+  ggplot(aes(x = mean)) +
+  geom_histogram() +
+  labs(title = "Mean Percent Cover of Exotics", x = "Percent Cover", y = "# Species")
+mean_exotic_hist
+  
+
+mean_exotic_box <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(mean = mean(percent_cover)) %>% 
+  ggplot(aes(x = as.factor(Year), y = mean)) +
+  geom_boxplot() +
+  geom_jitter(width = .1, alpha = .4) +
+  labs(title = "Mean Percent Cover of Exotics", x = "Year", y = "Percent Cover")
+mean_exotic_box
+
+mean_exotic_col <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year) %>% 
+  summarize(mean = mean(percent_cover)) %>% 
+  ggplot(aes(x = as.factor(Year), y = mean)) +
+  geom_col() +
+  labs(title = "Total Percent Cover of Exotics", x = "Year", y = "Percent Cover")
+mean_exotic_col
+
+```
+
+## 1b. Grouped by pool
+
+Results: Only PH1, RT, WT1, WT2 increased in exotics; CS, MS, TP decreased
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+# 1b. Compare max % cover of each exotic species, 2017 vs 2018, by pool
+
+## Column graph of 2017 vs. 2018 total max percent cover by pool
+pool_max_exotic_col <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Plot, Year) %>% 
+  summarize(
+    Max_Total_Percent_Cover = sum(max),
+    Species_Richness = length(max)
+  ) %>% 
+  ggplot(aes(x = Plot)) +
+  geom_col(aes(y = Max_Total_Percent_Cover, fill = as.factor(Year)), position = "dodge") +
+  labs(title = "Maximum Percent Cover of Exotics", x = "Pool", y = "Percent Cover", caption = "Only PH1, RT, WT1, WT2 increased; CS, MS, TP decreased")
+pool_max_exotic_col
+
+## Column graph of 2017 vs. 2018 species richness by pool
+pool_richness_col <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot, Replicate_Zone) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Plot, Year) %>% 
+  summarize(
+    Max_Total_Percent_Cover = sum(max),
+    Species_Richness = length(max)
+  ) %>% 
+  ggplot(aes(x = Plot)) +
+  geom_col(aes(y = Species_Richness, fill = as.factor(Year)), position = "dodge") +
+  labs(title = "Species Richness", x = "Pool", y = "Species Richness", caption = "Only PH1, RT, WT1, WT2 increased; CS, MS decreased while TP stayed the same despite decreased % cover")
+pool_richness_col
+
+# Exploratory histogram
+pool_max_exotic_hist <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  ggplot(aes(x = max)) +
+  geom_histogram() +
+  facet_wrap(~Plot) +
+  labs(title = "Maximum Percent Cover of Exotics", x = "Percent Cover", y = "# Species")
+#pool_max_exotic_hist
+#all have same pattern as aggregate exploratory histogram -- skewed right
+  
+# Boxplot of 2017 vs 2018 maximum % cover of each exotic species
+pool_max_exotic_box <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  ggplot(aes(x = as.factor(Year), y = max)) +
+  geom_boxplot() +
+  geom_jitter(width = .1, alpha = .4) +
+  facet_wrap(~Plot) +
+  labs(title = "Maximum Percent Cover of Exotics", x = "Year", y = "Percent Cover")
+pool_max_exotic_box
+
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+# 1b. Compare max % cover of each exotic species, 2017 vs 2018, by zone
+
+## Column graph of 2017 vs. 2018 total max percent cover by zone
+zone_max_exotic_col <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Replicate_Zone) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Replicate_Zone, Year) %>% 
+  summarize(
+    Max_Total_Percent_Cover = sum(max),
+    Species_Richness = length(max)
+  ) %>% 
+  na.omit() %>% 
+  ggplot(aes(x = Replicate_Zone)) +
+  geom_col(aes(y = Max_Total_Percent_Cover, fill = as.factor(Year)), position = "dodge") +
+  labs(title = "Maximum Percent Cover of Exotics", x = "Zone", y = "Percent Cover", caption = "Only transition zone increased")
+zone_max_exotic_col
+
+
+## Column graph of 2017 vs. 2018 species richness by zone
+zone_richness_col <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Replicate_Zone) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Replicate_Zone, Year) %>% 
+  summarize(
+    Max_Total_Percent_Cover = sum(max),
+    Species_Richness = length(max)
+  ) %>% 
+  na.omit() %>% 
+  ggplot(aes(x = Replicate_Zone)) +
+  geom_col(aes(y = Species_Richness, fill = as.factor(Year)), position = "dodge") +
+  labs(title = "Species Richness", x = "Zone", y = "Species Richness", caption = "All increased")
+zone_richness_col
+
+# Exploratory histogram
+pool_max_exotic_hist <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  ggplot(aes(x = max)) +
+  geom_histogram() +
+  facet_wrap(~Plot) +
+  labs(title = "Maximum Percent Cover of Exotics", x = "Percent Cover", y = "# Species")
+#pool_max_exotic_hist
+#all have same pattern as aggregate exploratory histogram -- skewed right
+  
+# Boxplot of 2017 vs 2018 maximum % cover of each exotic species
+zone_max_exotic_box <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Replicate_Zone) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  na.omit() %>% 
+  ggplot(aes(x = as.factor(Year), y = max)) +
+  geom_boxplot() +
+  geom_jitter(width = .1, alpha = .4) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Maximum Percent Cover of Exotics", x = "Year", y = "Percent Cover")
+zone_max_exotic_box
+
+```
+
+But...lots of variation between pools...
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# Grouped by zone and pool
+
+## Column graph of 2017 vs. 2018 total max percent cover
+zone_pool_max_exotic_col <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Replicate_Zone, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Replicate_Zone, Year, Plot) %>% 
+  summarize(
+    Max_Total_Percent_Cover = sum(max),
+    Species_Richness = length(max)
+  ) %>% 
+  na.omit() %>% 
+  ggplot(aes(x = Replicate_Zone)) +
+  geom_col(aes(y = Max_Total_Percent_Cover, fill = as.factor(Year)), position = "dodge") +
+  facet_wrap(~Plot) +
+  labs(title = "Maximum Percent Cover of Exotics", x = "Zone", y = "Percent Cover", caption = "CS, PH1, RT, WT1, WT2 increased")
+zone_pool_max_exotic_col
+
+## Column graph of 2017 vs. 2018 total species richness
+zone_pool_richness_col <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Replicate_Zone, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Replicate_Zone, Year, Plot) %>% 
+  summarize(
+    Max_Total_Percent_Cover = sum(max),
+    Species_Richness = length(max)
+  ) %>% 
+  na.omit() %>% 
+  ggplot(aes(x = Replicate_Zone)) +
+  geom_col(aes(y = Species_Richness, fill = as.factor(Year)), position = "dodge") +
+  facet_wrap(~Plot) +
+  labs(title = "Species Richness of Exotics", x = "Zone", y = "Species Richness", caption = "All but MS increased")
+zone_pool_richness_col
+
+```
+
+## 1c. Grouped by zone
+
+Results: Only transition zone increased in exotic percent cover; central and upland zone decreased.  However, all zones increased in exotic species richness.
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+# 1b. Compare max % cover of each exotic species, 2017 vs 2018, by zone
+
+## Boxplot
+zone_max_exotic_box <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Replicate_Zone, Plot) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Replicate_Zone, Year, Plot) %>% 
+  summarize(
+    Max_Total_Percent_Cover = sum(max),
+    Species_Richness = length(max)
+  ) %>% 
+  na.omit()  %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = Max_Total_Percent_Cover)) +
+  geom_boxplot() +
+  geom_jitter(aes(color = Plot)) +
+  labs(title = "Maximum Percent Cover of Exotics", x = "Zone", y = "Percent Cover", caption = "Only transition zone increased")
+zone_max_exotic_box
+
+# time since
+time_since <- np_percent_cover %>%
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Plot, Replicate_Zone) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Year, Plot, Replicate_Zone) %>% 
+  summarize(total = sum(max),
+            richness = length(max)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  ggplot(aes(x = Replicate_Zone)) +
+  geom_col(aes(y = total, fill = as.factor(Time_Since)), position = "dodge") +
+  labs(title = "Maximum Percent Cover of Exotics", x = "Zone", y = "Percent Cover", caption = "Only transition zone increased")
+time_since
+
+## Column graph of 2017 vs. 2018 total max percent cover by zone
+zone_max_exotic_col <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Replicate_Zone) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Replicate_Zone, Year) %>% 
+  summarize(
+    Max_Total_Percent_Cover = sum(max),
+    Species_Richness = length(max)
+  ) %>% 
+  na.omit() %>% 
+  ggplot(aes(x = Replicate_Zone)) +
+  geom_col(aes(y = Max_Total_Percent_Cover, fill = as.factor(Year)), position = "dodge") +
+  labs(title = "Maximum Percent Cover of Exotics", x = "Zone", y = "Percent Cover", caption = "Only transition zone increased")
+zone_max_exotic_col
+
+
+## Column graph of 2017 vs. 2018 species richness by zone
+zone_richness_col <- np_percent_cover %>% 
+  filter(Native_Status == "E", Year >2016) %>% 
+  group_by(Species_Full_Name, Year, Replicate_Zone) %>% 
+  summarize(max = max(percent_cover)) %>% 
+  group_by(Replicate_Zone, Year) %>% 
+  summarize(
+    Max_Total_Percent_Cover = sum(max),
+    Species_Richness = length(max)
+  ) %>% 
+  na.omit() %>% 
+  ggplot(aes(x = Replicate_Zone)) +
+  geom_col(aes(y = Species_Richness, fill = as.factor(Year)), position = "dodge") +
+  labs(title = "Species Richness", x = "Zone", y = "Species Richness", caption = "All increased")
+zone_richness_col
+
+```
