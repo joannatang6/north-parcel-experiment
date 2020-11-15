@@ -14,7 +14,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r include = FALSE}
 
 # Loading packages, read in data
-library(tidyverse)
 library(knitr)
 library(kableExtra)
 library(vegan)
@@ -33,9 +32,16 @@ library(nlme)
 library(MASS)
 library(fitdistrplus)
 library(plotrix)
+library(janitor)
+library(tidyverse)
 
 np_percent_cover_master <- read_csv("np_percent_cover.csv")
 metadata <- read_csv("metadata.csv")
+np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
+np_2018_seed_bank_master <- read_csv("np.2018.seed.bank.csv")
+biomass_master <- read_csv("biomass.csv")
+del_sol <- read_csv("delsol.csv")
+noaa <- read_csv("1567450.csv")
 
 ```
 
@@ -74,8 +80,25 @@ np_percent_cover <- np_percent_cover_master %>%
   mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3"))
 np_percent_cover <- full_join(np_percent_cover, metadata) %>% 
   mutate(month_number = case_when(Month == "JANUARY" ~ 1, Month == "FEBRUARY" ~ 2, Month == "MARCH" ~ 3, Month == "APRIL" ~ 4, Month == "MAY" ~ 5, Month == "JUNE" ~ 6, Month == "JULY" ~ 7, Month == "AUGUST" ~ 8, Month == "SEPTEMBER" ~ 9, Month == "OCTOBER" ~ 10, Month == "NOVEMBER" ~ 11, Month == "DECEMBER" ~ 12)) %>% 
-  mutate(date = paste(Year, month_number, "1", sep="-" ))
+  mutate(date = paste(Year, month_number, "1", sep="-" )) %>% 
+  select(-X8)
 np_percent_cover$date = as.Date(np_percent_cover$date)
+
+
+## Convert np_2016_seedbank into tidy format, remove NAs, separate "Replicate" label into Replicate_Zone and Replicate_Number
+seedbank_2016 <- gather(np_2016_seedbank_master, key = "Species", value = "Count", -c(Plot, Replicate)) %>% 
+  na.omit(np_2016_seedbank_master) %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3")) %>% 
+  full_join(metadata)
+
+## Calculate total abundance of each species per Replicate for 2018 seed bank data, join to metadata
+np_seedbank_2018 <- np_2018_seed_bank_master %>% 
+  group_by(Plot, Replicate, Species) %>% 
+  summarize(Count = sum(Count)) %>% 
+  add_column(Year = 2018) %>% 
+  full_join(metadata)
+
 
 ```
 
@@ -292,6 +315,33 @@ np_annual_total_exotic_medians_scatter
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
 
 # 1c. Do pools converge on the same exotic community composition over time? (NMDS)
+creation_year_numbered_df <- creation_year_df %>% mutate(Plot = case_when(Plot == "PH1" ~ "1", Plot == "TP" ~ "7", Plot == "RT" ~ "4", Plot == "MS" ~ "9", Plot == "WT1" ~ "14", Plot == "WT2" ~ "16", Plot == "CS" ~"19"))
+
+# Create new data frame with creation year of each pool, depth of each pool, water quality
+pool_factors_df <- data.frame(Plot = c("1", "7", "4", "9", "14", "16", "19"), depth_in = c("16", "18", "9", "16.5", "16", "17", "15"), area_m2 = c("173.13", "346.79", "85.28", "160.07", "432.89", "424.18", "359.38"), do_mg = c("3.73", "4.825", "4.635", "8.22", "2.925", "3.25", "4.44"), do_sat = c("38.4", "49.75", "49.15", "85.2", "28.6", "33.5", "44.25"), conductivity = c("1156", "91.25", "236", "674", "214", "288.95", "491.8"), salinity = c(".7", ".05", ".15", ".4", ".15", "1.1", ".3")) %>% 
+  full_join(creation_year_numbered_df) %>% 
+  mutate(Creation_Year = as.character(Creation_Year)) %>% 
+  mutate(Creation_Year = as.numeric(Creation_Year))
+
+# Community matrix dataframe with all variables
+np_nmds_df <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "1", Replicate_Zone == "T" ~ "2", Replicate_Zone == "U" ~ "3")) %>% 
+  mutate(Plot = case_when(Plot == "PH1" ~ "1", Plot == "TP" ~ "7", Plot == "RT" ~ "4", Plot == "MS" ~ "9", Plot == "WT1" ~ "14", Plot == "WT2" ~ "16", Plot == "CS" ~"19")) %>% 
+  group_by(date, month_number, Year, Plot, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate_Zone, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  full_join(pool_factors_df) %>% 
+  mutate(age = Year - Creation_Year) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0)))
+
+# Community matrix dataframe
+np_community_matrix <- np_nmds_df %>% 
+  select(-date, -month_number, -Year, -Plot, -Replicate_Zone, -month_year, -depth_in, -area_m2, -do_mg, -do_sat, -conductivity, -salinity, -Creation_Year, -age)
+
+
 
 # From np_draft3.Rmd -- Compare 2016 exotic seed bank species to May 2017 anad 2018 percent cover species, by pool and zone
 
@@ -302,7 +352,7 @@ seedbank_2016[seedbank_2016 == 0] <- NA
 richness_2016_seed_bank <- seedbank_2016 %>% 
   add_column(Year = 2016) %>% 
   select(Plot, Replicate, Replicate_Zone, Year, Native_Status, Count) %>% 
-    na.omit() %>%
+  na.omit() %>%
   group_by(Plot, Replicate, Replicate_Zone, Year, Native_Status) %>% 
   summarize(richness = length(Count))
 
@@ -347,7 +397,7 @@ np_exotic_richness_may_col
 
 ### Check for normality
 #np_exotic_seed_bank_richness_hist <- ggplot(np_exotic_seed_bank_richness) +
-  geom_histogram(aes(x = richness))
+#  geom_histogram(aes(x = richness))
 #np_exotic_seed_bank_richnes_hist
 ####not normal
 
@@ -532,6 +582,7 @@ del_sol_cover_col <-  np_percent_cover %>%
   theme(axis.text.x = element_text(angle = 90)) +
   facet_wrap(~Native_Status)
 del_sol_cover_col
+
 ```
 
 
