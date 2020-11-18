@@ -33,6 +33,8 @@ library(MASS)
 library(fitdistrplus)
 library(plotrix)
 library(janitor)
+library(ggpubr)
+library(rstatix)
 library(tidyverse)
 
 np_percent_cover_master <- read_csv("np_percent_cover.csv")
@@ -42,6 +44,7 @@ np_2018_seed_bank_master <- read_csv("np.2018.seed.bank.csv")
 biomass_master <- read_csv("biomass.csv")
 del_sol <- read_csv("delsol.csv")
 noaa <- read_csv("1567450.csv")
+np_pc_ord <- read_csv("pc-ord_nms_scores.csv")
 
 ```
 
@@ -81,7 +84,7 @@ np_percent_cover <- np_percent_cover_master %>%
 np_percent_cover <- full_join(np_percent_cover, metadata) %>% 
   mutate(month_number = case_when(Month == "JANUARY" ~ 1, Month == "FEBRUARY" ~ 2, Month == "MARCH" ~ 3, Month == "APRIL" ~ 4, Month == "MAY" ~ 5, Month == "JUNE" ~ 6, Month == "JULY" ~ 7, Month == "AUGUST" ~ 8, Month == "SEPTEMBER" ~ 9, Month == "OCTOBER" ~ 10, Month == "NOVEMBER" ~ 11, Month == "DECEMBER" ~ 12)) %>% 
   mutate(date = paste(Year, month_number, "1", sep="-" )) %>% 
-  select(-X8)
+  dplyr::select(-X8)
 np_percent_cover$date = as.Date(np_percent_cover$date)
 
 
@@ -317,13 +320,13 @@ np_annual_total_exotic_medians_scatter
 # 1c. Do pools converge on the same exotic community composition over time? (NMDS)
 creation_year_numbered_df <- creation_year_df %>% mutate(Plot = case_when(Plot == "PH1" ~ "1", Plot == "TP" ~ "7", Plot == "RT" ~ "4", Plot == "MS" ~ "9", Plot == "WT1" ~ "14", Plot == "WT2" ~ "16", Plot == "CS" ~"19"))
 
-# Create new data frame with creation year of each pool, depth of each pool, water quality
+## Create new data frame with creation year of each pool, depth of each pool, water quality
 pool_factors_df <- data.frame(Plot = c("1", "7", "4", "9", "14", "16", "19"), depth_in = c("16", "18", "9", "16.5", "16", "17", "15"), area_m2 = c("173.13", "346.79", "85.28", "160.07", "432.89", "424.18", "359.38"), do_mg = c("3.73", "4.825", "4.635", "8.22", "2.925", "3.25", "4.44"), do_sat = c("38.4", "49.75", "49.15", "85.2", "28.6", "33.5", "44.25"), conductivity = c("1156", "91.25", "236", "674", "214", "288.95", "491.8"), salinity = c(".7", ".05", ".15", ".4", ".15", "1.1", ".3")) %>% 
   full_join(creation_year_numbered_df) %>% 
   mutate(Creation_Year = as.character(Creation_Year)) %>% 
   mutate(Creation_Year = as.numeric(Creation_Year))
 
-# Community matrix dataframe with all variables
+## Community matrix dataframe with all variables
 np_nmds_df <- np_percent_cover %>% 
   filter(Replicate_Zone != "NA") %>% 
   mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "1", Replicate_Zone == "T" ~ "2", Replicate_Zone == "U" ~ "3")) %>% 
@@ -337,9 +340,57 @@ np_nmds_df <- np_percent_cover %>%
   pivot_wider(names_from = Species, values_from = mean_pc) %>% 
   mutate_all(funs(replace_na(.,0)))
 
-# Community matrix dataframe
-np_community_matrix <- np_nmds_df %>% 
-  select(-date, -month_number, -Year, -Plot, -Replicate_Zone, -month_year, -depth_in, -area_m2, -do_mg, -do_sat, -conductivity, -salinity, -Creation_Year, -age)
+## Used the above community matrix and variables to run NMS in PC-ORD with Scott Cooper 11/13/2020
+
+## Repeated measures ANOVA for NMS1
+
+### Dataframe of NMS1 scores
+nms1_df <- np_pc_ord %>% 
+  mutate(plot = case_when(plot == "1" ~ "PH1", plot == "7" ~ "TP", plot == "4" ~ "RT", plot == "9" ~ "MS", plot == "14" ~ "WT1", plot == "16" ~ "WT2", plot == "19" ~ "CS")) %>% 
+  mutate(replicate_zone = case_when(replicate_zone == "1" ~ "C", replicate_zone == "2" ~ "T", replicate_zone == "3" ~ "U")) %>% 
+  mutate(replicate = paste(plot, replicate_zone, sep = "_")) %>% 
+  dplyr::select(replicate, month_year, nms1) %>% 
+  pivot_wider(names_from = month_year, values_from = nms1) %>% 
+  pivot_longer(2:27, names_to = "month_year", values_to = "nms1")
+
+### Exploratory graphs, checking assumptions
+nms1_hist <- nms1_df %>% 
+  ggplot() +
+  geom_histogram(aes(x = nms1)) +
+  facet_wrap(~month_year)
+#kind of normal-ish -- skewed left-ish
+nms1_qq <- nms1_df %>% 
+  ggplot() +
+  geom_qq(aes(sample = nms1)) +
+  facet_wrap(~month_year)
+#kind of normal-ish -- skewed left-ish
+nms1_normality <- nms1_df %>% 
+  group_by(month_year) %>% 
+  shapiro_test(nms1)
+
+### Repeated measures ANOVA
+nms1_rmanova <- anova_test(data = nms1_df, nms1 ~ month_year, wid = replicate)
+#get_anova_table(nms1_rmanova)
+#p << .001, F(488) = 6.717, ges = .256
+
+### Pairwise t-tests
+nms1_t_tests <- pairwise_t_test(data = nms1_df, nms1 ~ month_year, paired = TRUE, p.adjust.method = "bonferroni")
+
+
+### Community matrix dataframe
+np_community_matrix <- np_nmds_df[, -c(1:5)]
+np_community_matrix <- np_community_matrix[, -c(2:10)]
+np_community_matrix <- np_community_matrix %>% 
+  column_to_rownames(var = "replicate_date")
+
+### NMDS
+np_nmds <- metaMDS(np_community_matrix, distance = "bray", k=2, wascores = TRUE)
+np_nmds_scores <- np_nmds$species
+plot(np_nmds)
+orditorp(np_nmds, "species")
+orditorp(np_nmds,display="sites",cex=.25,air=0.01, alpha =  .5)
+
+
 
 
 
