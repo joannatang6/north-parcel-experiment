@@ -93,6 +93,7 @@ seedbank_2016 <- gather(np_2016_seedbank_master, key = "Species", value = "Count
   na.omit(np_2016_seedbank_master) %>% 
   mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
   mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3")) %>% 
+  filter(Count>0) %>% 
   full_join(metadata)
 
 ## Calculate total abundance of each species per Replicate for 2018 seed bank data, join to metadata

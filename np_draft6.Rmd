@@ -1,0 +1,1060 @@
+---
+title: "NP Draft 6"
+author: "Joanna Tang"
+date: "4/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r include = FALSE}
+
+# Loading packages, read in data
+library(pairwiseAdonis)
+library(kableExtra)
+library(vegan)
+library(car)
+library(RColorBrewer)
+library(reshape2)
+library(kableExtra)
+library(FSA)
+library(plotly)
+library(ggsignif)
+library(lme4)
+library(bestNormalize)
+library(betareg)
+library(nlme)
+library(MASS)
+library(fitdistrplus)
+library(plotrix)
+library(janitor)
+library(ggpubr)
+library(rstatix)
+library(tidyverse)
+
+np_percent_cover_master <- read_csv("np_percent_cover.csv")
+metadata <- read_csv("metadata.csv")
+np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
+np_2018_seed_bank_master <- read_csv("np.2018.seed.bank.csv")
+biomass_master <- read_csv("combined_biomass.csv")
+del_sol <- read_csv("delsol.csv")
+noaa <- read_csv("1567450.csv")
+np_pc_ord <- read_csv("pc-ord_nms_scores.csv")
+np_community_matrix_variables <- read_csv("np_community_matrix_variables.csv")
+
+```
+
+
+```{r include = FALSE}
+
+# Outline
+
+# 0. Tidy up data
+
+# 1. How does exotic community change over time?
+## 1a. How does total exotic percent cover change with time since restoration (and interannual climate variability?)? (boxplots)
+## 1b. Is there a threshold (# of years) after which exotic abundance increases? (linear model)
+## 1c. Do pools converge on the same exotic community composition over time? (NMDS)
+
+# 2. What environmental filters can be manipulated to decrease exotics?
+## 2a. How does the seedbank compare to the aboveground cover? (presence/absence data)
+## 2b. Does active management result in a different exotic community? (NMDS w/ old Del Sol data)
+## 2c. Do certain exotics and natives occupy the same (phenological) niche? (NMDS, or scatterplot b/t 2 species)
+
+# 3. What is the ideal monitoring plan?
+## 3a. Same as 1b -- is there a threshold after which exotics increase (i.e., what's the ideal duration of monitoring?)?
+## 3b. What is the ideal frequency/season of monitoring? (boxplots)
+
+
+```
+
+
+```{r include = FALSE}
+
+# 0. Tidy up data
+
+## Separate "Replicate" label into Replicate_Zone and Replicate_Number, join with species metadata, convert month and year to "date" column
+np_percent_cover <- np_percent_cover_master %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3"))
+np_percent_cover <- full_join(np_percent_cover, metadata) %>% 
+  mutate(month_number = case_when(Month == "JANUARY" ~ 1, Month == "FEBRUARY" ~ 2, Month == "MARCH" ~ 3, Month == "APRIL" ~ 4, Month == "MAY" ~ 5, Month == "JUNE" ~ 6, Month == "JULY" ~ 7, Month == "AUGUST" ~ 8, Month == "SEPTEMBER" ~ 9, Month == "OCTOBER" ~ 10, Month == "NOVEMBER" ~ 11, Month == "DECEMBER" ~ 12)) %>% 
+  mutate(date = paste(Year, month_number, "1", sep="-" )) %>% 
+  dplyr::select(-X8)
+np_percent_cover$date = as.Date(np_percent_cover$date)
+
+
+## Convert np_2016_seedbank into tidy format, remove NAs, separate "Replicate" label into Replicate_Zone and Replicate_Number
+seedbank_2016 <- gather(np_2016_seedbank_master, key = "Species", value = "Count", -c(Plot, Replicate)) %>% 
+  na.omit(np_2016_seedbank_master) %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3")) %>% 
+  filter(Count>0) %>% 
+  full_join(metadata)
+
+## Calculate total abundance of each species per Replicate for 2018 seed bank data, join to metadata
+np_seedbank_2018 <- np_2018_seed_bank_master %>% 
+  group_by(Plot, Replicate, Species) %>% 
+  summarize(Count = sum(Count)) %>% 
+  add_column(Year = 2018) %>% 
+  full_join(metadata)
+
+
+```
+
+# 1. How does exotic community change over time?
+
+## 1a. How does total exotic percent cover change with time since restoration?
+
+Hypothesis: Exotics will be able to reinvade, causing increased exotic abundance and diversity with increased time since restoration.
+
+Results: Significant increase in total exotic percent cover after year 6 -- due to increase in exotics in transition and upland zones.
+
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1a. How does total exotic percent cover change with time since restoration (and interannual climate variability?)? (boxplots)
+
+
+## Create new data frame with creation year of each pool
+creation_year_df <- data.frame(Plot = c("PH1", "TP", "RT", "MS", "WT1", "WT2", "CS"), Creation_Year = c("2010", "2012", "2012", "2015", "2014", "2014", "2013"))
+
+## Calculate total exotic % cover per quadrat, find max total exotic % cover per quadrat per year, add time since restoration column
+np_annual_total_exotic <- np_percent_cover %>%
+  filter(Native_Status == "E") %>% 
+  filter(Year > 2016) %>% 
+  group_by(date, Year, Month, Plot, Replicate, Replicate_Zone) %>% 
+  summarize(total_exotic_pc = sum(percent_cover)) %>% 
+  drop_na() %>% 
+  group_by(Year, Plot, Replicate, Replicate_Zone) %>% 
+  summarize(max_annual_exotic_pc = max(total_exotic_pc)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year)
+
+## Dataframe of median of the max annual total % cover of each pool
+np_annual_total_exotic_medians <- np_annual_total_exotic %>% 
+  group_by(Year, Plot, Time_Since) %>% 
+  summarize(median = median(max_annual_exotic_pc))
+
+## Boxplot of total exotic % cover
+total_exotic_pc_box <- np_annual_total_exotic %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = max_annual_exotic_pc)) +
+  geom_boxplot() +
+  geom_jitter(width = .2, alpha = .4) +
+  labs(title = "Total Percent Cover of Exotics", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "Increase in median after year 6 driven by sig incraese in transition and upland zones (Dunn's Kruskal-Wallis Multiple Comparisons p =)") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0))
+total_exotic_pc_box
+
+## Boxplot of total exotic % cover, by zone
+total_exotic_pc_zone_box <- np_annual_total_exotic %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = max_annual_exotic_pc)) +
+  geom_boxplot() +
+  geom_jitter(width = .2, alpha = .4) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Total Percent Cover of Exotics, by zone", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "Increase in median after year 6 driven by sig incraese in transition and upland zones (Dunn's Kruskal-Wallis Multiple Comparisons p =)") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0))
+total_exotic_pc_zone_box
+
+## Boxplot of total exotic % cover, by monitoring year -- everything's higher in 2019...
+total_exotic_pc_year_box <- np_annual_total_exotic %>% 
+  ggplot(aes(x = as.factor(Year), y = max_annual_exotic_pc)) +
+  geom_boxplot() +
+  geom_jitter(width = .2, alpha = .4) +
+  labs(title = "Total Percent Cover of Exotics", x = "Year", y = "Percent Cover", caption = "everything's higher in 2019...") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0))
+total_exotic_pc_year_box
+
+
+
+
+# Check for normality -- not normal
+pc_hist <- ggplot(np_annual_total_exotic, aes(x = max_annual_exotic_pc)) +
+  geom_histogram()
+pc_qq <- ggplot(np_annual_total_exotic, aes(sample = max_annual_exotic_pc)) +
+  geom_qq()
+
+#### from original data analysis for Cal-IPC poster
+## 95% CI around median
+#lower CI = (n/2) - (1.96*sqrt(n))/2 th ranked value
+#upper CI = 1 + (n/2) + (1.96*sqrt(n))/2 th ranked value
+
+#n(3yrs) = 3
+#lower CI = (3/2) - (1.96*sqrt(3/2)) = -.9 -> 1st ranked value = 2.38
+#upper CI = 1 + (3/2) + (1.96*sqrt(3/2)) = 4.9005 -> 3rd ranked value -> 3.0
+
+#n(4yrs) = 4
+#lower CI = (4/2) - (1.96*sqrt(4/2)) = -.77 -> 1st ranked value = 2.73
+#upper CI = 1 + (4/2) + (1.96*sqrt(4/2)) = 5.77 -> 4th ranked value -> 4.27
+
+#n(5yrs) = 5
+#lower CI = (5/2) - (1.96*sqrt(5/2)) = -.60 -> 1st ranked value = 2.65
+#upper CI = 1 + (5/2) + (1.96*sqrt(5/2)) = 6.60 -> 5th ranked value -> 11.533
+
+#n(6yrs) = 3
+#lower CI = (3/2) - (1.96*sqrt(3/2)) = -.9 -> 1st ranked value = 4.90
+#upper CI = 1 + (3/2) + (1.96*sqrt(3/2)) = 4.9005 -> 3rd ranked value -> 17.86
+
+#n(7yrs) = 3
+#lower CI = (3/2) - (1.96*sqrt(3/2)) = -.9 -> 1st ranked value = 8.60
+#upper CI = 1 + (3/2) + (1.96*sqrt(3/2)) = 4.9005 -> 3rd ranked value -> 19.12
+
+exotic_pc_ci_df <- np_percent_cover %>%
+  filter(Native_Status == "E") %>% 
+  filter(Year > 2016) %>% 
+  group_by(date, Year, Month, Plot, Replicate, Replicate_Zone) %>% 
+  summarize(total_exotic_pc = sum(percent_cover)) %>% 
+  drop_na() %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  filter(Time_Since >2) %>% 
+  filter(Time_Since <8) %>% 
+  group_by(Time_Since) %>% 
+  summarize(
+    median = median(total_exotic_pc),
+    max = max(total_exotic_pc),
+    min = min(total_exotic_pc)
+  )
+
+exotic_pc_ci_zone_df <- np_percent_cover %>%
+  filter(Native_Status == "E") %>% 
+  filter(Year > 2016) %>% 
+  group_by(date, Year, Month, Plot, Replicate, Replicate_Zone) %>% 
+  summarize(total_exotic_pc = sum(percent_cover)) %>% 
+  drop_na() %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  filter(Time_Since >2) %>% 
+  filter(Time_Since <8) %>% 
+  group_by(Time_Since, Replicate_Zone) %>% 
+  summarize(
+    median = median(total_exotic_pc),
+    max = max(total_exotic_pc),
+    min = min(total_exotic_pc)
+  )
+
+#### from original data analysis for Cal-IPC poster
+#n(3yrs) = 23
+#lower CI = (23/2) - (1.96*sqrt(23/2)) = 4.85 -> 4th ranked value = 1.33
+#upper CI = 1 + (23/2) + (1.96*sqrt(23/2)) = 19.15 -> 20th ranked value -> 3.50
+
+#n(4yrs) = 30
+#lower CI = (30/2) - (1.96*sqrt(30/2)) = 7.41 -> 7th ranked value = 2.00
+#upper CI = 1 + (30/2) + (1.96*sqrt(30/2)) = 23.59 ->24th ranked value -> 4.33
+
+#n(5yrs) = 34
+#lower CI = (34/2) - (1.96*sqrt(34/2)) = 9.92 -> 9th ranked value = 2.50
+#upper CI = 1 + (34/2) + (1.96*sqrt(34/2)) = 26.08 -> 26th ranked value -> 8.67
+
+#n(6yrs) = 23
+#lower CI = (23/2) - (1.96*sqrt(23/2)) = 4.85 -> 4th ranked value = 2.00
+#upper CI = 1 + (23/2) + (1.96*sqrt(23/2)) = 19.15 -> 20th ranked value -> 15.00
+
+#n(7yrs) = 22
+#lower CI = (22/2) - (1.96*sqrt(22/2)) = 4.50 -> 4th ranked value = 2.50
+#upper CI = 1 + (22/2) + (1.96*sqrt(22/2)) = 18.50 -> 18th ranked value -> 25.33
+
+## Column graph of total % cover vs. time since, w/ 95% CI
+total_exotic_col <- exotic_pc_ci_df %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = median)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = min, ymax = max, width = .2)) +
+  labs(title = "Total Percent Cover of Exotics", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "Sig increase in median during year 6 (Dunn's Kruskal-Wallis Multiple Comparisons p = )") +
+  theme_classic() +
+    scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 25)) +
+  theme(text = element_text(size=20))
+#total_exotic_col
+
+## Column graph of total % cover vs. time since, w/ 95% CI, by zone
+total_avg_exotic_zone_col <- exotic_pc_ci_zone_df %>% 
+   ggplot(aes(x = as.factor(Time_Since), y = median)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = min, ymax = max, width = .2)) +
+  facet_wrap(~Replicate_Zone) +
+  geom_signif(comparisons = list(c("5", "6")), map_signif_level = TRUE) +
+  labs(title = "Total Percent Cover of Exotics", x = "Time Since Restoration (years)", y = "Percent Cover", caption = "Sig increase in median during year 6 driven by sig incraese in transition zone (Dunn's Kruskal-Wallis Multiple Comparisons p = )") +
+  theme_classic() +
+      scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 30)) +
+  theme(text = element_text(size=20))
+#total_avg_exotic_zone_col
+
+```
+
+
+## 1b. Is there a threshold (# of years) after which exotic abundance increases?
+
+Hypothesis: We will see increased exotic species percent cover and diversity with increased time since restoration due to reinvasion.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1b. Is there a threshold (# of years) after which exotic abundance increases? (linear model)
+
+# Scatterplot of median of annual max total % exotic cover
+np_annual_total_exotic_medians_scatter <- np_annual_total_exotic_medians %>% 
+  ggplot(aes(x = Time_Since, y = median, group = Plot)) +
+  geom_point(aes(color = Plot)) +
+  geom_smooth(method = lm, aes(x = Time_Since, group = NULL), se = TRUE, size = .5) +
+  labs(title = "Total Percent Cover of Exotics", x = "Time Since Restoration (years)", y = "Median Percent Cover (%)", caption = "High variation; WT2, PH1, & esp WT1 and RT increased") +
+  theme_classic() +
+  scale_color_brewer(palette = "Dark2", name = "Vernal Pool") +
+  scale_y_continuous(expand = c(0,0))
+np_annual_total_exotic_medians_scatter
+
+```
+
+
+
+## 1c. Do pools converge on the same exotic community composition over time?
+
+```{r include = FALSE}
+
+# Exploratory graphs using vegan
+
+## Community matrix
+np_community_matrix <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "1", Replicate_Zone == "T" ~ "2", Replicate_Zone == "U" ~ "3")) %>% 
+  mutate(Plot = case_when(Plot == "PH1" ~ "1", Plot == "TP" ~ "7", Plot == "RT" ~ "4", Plot == "MS" ~ "9", Plot == "WT1" ~ "14", Plot == "WT2" ~ "16", Plot == "CS" ~"19")) %>% 
+  group_by(date, month_number, Year, Plot, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate_Zone, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0))) %>% 
+  column_to_rownames("replicate_date") %>% 
+  select(7:141)
+
+
+
+## How speciose are my communities?
+np_richness <- specnumber(np_community_matrix)
+
+### Does species richness differ b/t pools?
+np_richness_aov <- aov(np_richness ~ Plot, data = np_community_matrix_variables)
+#summary(np_richness_aov)
+#p = .779, F = .078
+#no sig difference of richness b/t pools
+
+#### Richness, by plot
+np_richness_box <- np_richness %>% 
+  enframe() %>% 
+  full_join(np_community_matrix_variables, by = c("name" = "replicate_date")) %>% 
+  ggplot(aes(x = as.factor(Plot), y = value)) +
+  geom_boxplot() +
+  geom_jitter(width = .2, alpha = .4) +
+  labs(title = "Species Richness, by plot", x = "Pool", y = "Richness", caption = "No difference in species richness across plots (ANOVA p = 0.779, F = 0.078))") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0))
+#np_richness_box
+
+
+
+
+## How diverse are my communities?
+np_shannon <- diversity(np_community_matrix)
+
+### Does diversity differ b/t pools?
+np_shannon_aov <- aov(np_shannon ~ Plot, data = np_community_matrix_variables)
+#summary(np_shannon_aov)
+#p = .082, F = .775
+#no sig difference of diversity b/t pools
+
+#### Shannon's Diversity, by plot
+np_shannon_box <- np_shannon %>% 
+  enframe() %>% 
+  full_join(np_community_matrix_variables, by = c("name" = "replicate_date")) %>% 
+  ggplot(aes(x = as.factor(Plot), y = value)) +
+  geom_boxplot() +
+  geom_jitter(width = .2, alpha = .4) +
+  labs(title = "Species Diversity, by plot", x = "Pool", y = "Shannon's Index", caption = "No difference in Shannon's Diversity across plots (ANOVA p = 0.082, F = 0.775))") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0))
+#np_shannon_box
+
+
+
+
+
+
+## How different are my communities in species composition? (perMANOVA)
+np_permanova <- adonis(np_community_matrix ~ Plot, data = np_community_matrix_variables)
+#p = .051, F = 2.1151
+
+### NMDS
+np_nmds <- metaMDS(np_community_matrix)
+#stressplot(np_nmds)
+#Generally, an average stress of > 0.2 is an indication that the ordination didn’t do a good job of representing community structure. However, NMDS stress increases as sample size increases, so if you have many samples (as this dataset does) your ordination will likely exhibit a lot of stress
+
+np_nmds_scores <- scores(np_nmds, display = "sites") %>% 
+  as.data.frame() %>% 
+  rownames_to_column("replicate_date") %>% 
+  full_join(np_community_matrix_variables)
+
+np_nmds_fit <- envfit(np_nmds, np_community_matrix, perm = 999) #envfit() takes the output of metaMDS() and the species matrix you created
+
+np_nmds_fit_pvals <- np_nmds_fit$vectors$pvals %>% 
+  as.data.frame() %>% 
+  rownames_to_column("species") %>% 
+  dplyr::rename("pvals" = ".") #extract p-values for each species
+
+np_nmds_fit_coords <- np_nmds_fit %>% 
+  scores(., display = "vectors") %>% 
+  as.data.frame() %>% 
+  rownames_to_column("species") %>% 
+  full_join(., np_nmds_fit_pvals, by = "species") %>% 
+  filter(pvals == 0.001) #extract coordinates for species, only keep species with p-val = 0.001
+
+### NMDS, by plot
+np_nmds_plot <- ggplot(np_nmds_scores, aes(x = NMDS1, y = NMDS2, color = as.factor(Plot), shape = as.factor(Plot))) +
+  geom_point() +
+  stat_ellipse(linetype = 2, size = 1) +
+  theme_classic() +
+  labs(title = "NMDS, by plot", caption = "No difference in community across plots (perANOVA p = 0.051, F = 2.11))")
+#np_nmds_plot
+
+
+
+
+
+
+## How is community structure related to specific environmental variables? (CCA)
+
+np_cca <- cca(np_community_matrix ~ creation_year + do_mg + depth_in + salinity + area_m2 + month, data = np_community_matrix_variables)
+np_cca_baseplot <- plot(np_cca)
+#get the scaling right for the vectors (blue in the base plot). To do this, you can store the base plot in an object, run that object, and extract the attr(,"arrow.mul") value from the summary that pops up in the console.
+#attr(,"arrow.mul") = 27.11853
+
+np_cca_vectors <- as.matrix(scores(np_cca, display = "bp", scaling = "species")*27.11853
+) %>% 
+  as.data.frame() #extract vectors
+
+np_cca_site_coords <- scores(np_cca, display = "sites") %>% 
+  as.data.frame() %>% 
+  rownames_to_column("replicate_date") %>% 
+  full_join(np_community_matrix_variables) #extract site coordinates
+
+np_cca_species_coords <- scores(np_cca, display = "species") %>% 
+  as.data.frame() #extract species coordinates
+
+#### CCA, with environmental biplot
+np_cca_biplot <- ggplot(np_cca_site_coords) +
+  geom_point(aes(x = CCA1, y = CCA2, color = as.factor(Plot)), shape = 19, size = 2, alpha = 0.8) +
+  coord_fixed() +
+  geom_segment(data = np_cca_vectors, aes(x = 0, y = 0, xend = CCA1, yend = CCA2), arrow = arrow(length = unit(0.2, "cm"))) +
+  geom_vline(xintercept = c(0), color = "grey70", linetype = 2) +
+  geom_hline(yintercept = c(0), color = "grey70", linetype = 2) +
+  geom_point(data = np_cca_species_coords, aes(x = CCA1, y = CCA2), shape = 17, size = 2, color = "slateblue") +
+  scale_x_continuous(limits = c(-12, 10)) +
+  scale_y_continuous(limits = c(-3, 12)) +
+  geom_text(data = np_cca_vectors, aes(x = CCA1, y = CCA2, label = rownames(np_cca_vectors)), nudge_x = 0.3, nudge_y = 0.3) +
+  labs(title = "Canonical Correspondence Analysis")
+np_cca_biplot
+
+```
+
+
+```{r include = FALSE}
+
+# NMDS with pc-ord NMS1 data
+creation_year_numbered_df <- creation_year_df %>% mutate(Plot = case_when(Plot == "PH1" ~ "1", Plot == "TP" ~ "7", Plot == "RT" ~ "4", Plot == "MS" ~ "9", Plot == "WT1" ~ "14", Plot == "WT2" ~ "16", Plot == "CS" ~"19"))
+
+## Create new data frame with creation year of each pool, depth of each pool, water quality
+pool_factors_df <- data.frame(Plot = c("1", "7", "4", "9", "14", "16", "19"), depth_in = c("16", "18", "9", "16.5", "16", "17", "15"), area_m2 = c("173.13", "346.79", "85.28", "160.07", "432.89", "424.18", "359.38"), do_mg = c("3.73", "4.825", "4.635", "8.22", "2.925", "3.25", "4.44"), do_sat = c("38.4", "49.75", "49.15", "85.2", "28.6", "33.5", "44.25"), conductivity = c("1156", "91.25", "236", "674", "214", "288.95", "491.8"), salinity = c(".7", ".05", ".15", ".4", ".15", "1.1", ".3")) %>% 
+  full_join(creation_year_numbered_df) %>% 
+  mutate(Creation_Year = as.character(Creation_Year)) %>% 
+  mutate(Creation_Year = as.numeric(Creation_Year))
+
+## Community matrix dataframe with all variables
+np_nmds_df <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "1", Replicate_Zone == "T" ~ "2", Replicate_Zone == "U" ~ "3")) %>% 
+  mutate(Plot = case_when(Plot == "PH1" ~ "1", Plot == "TP" ~ "7", Plot == "RT" ~ "4", Plot == "MS" ~ "9", Plot == "WT1" ~ "14", Plot == "WT2" ~ "16", Plot == "CS" ~"19")) %>% 
+  group_by(date, month_number, Year, Plot, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate_Zone, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  full_join(pool_factors_df) %>% 
+  mutate(age = Year - Creation_Year) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0)))
+
+## Used the above community matrix and variables to run NMS in PC-ORD with Scott Cooper 11/13/2020
+
+### Dataframe of NMS1 scores
+nms1_df <- np_pc_ord %>% 
+  mutate(plot = case_when(plot == "1" ~ "PH1", plot == "7" ~ "TP", plot == "4" ~ "RT", plot == "9" ~ "MS", plot == "14" ~ "WT1", plot == "16" ~ "WT2", plot == "19" ~ "CS")) %>% 
+  mutate(replicate_zone = case_when(replicate_zone == "1" ~ "C", replicate_zone == "2" ~ "T", replicate_zone == "3" ~ "U")) %>% 
+  mutate(replicate = paste(plot, replicate_zone, sep = "_")) %>% 
+  dplyr::select(replicate, plot, replicate_zone, month_year, nms1) %>% 
+  pivot_wider(names_from = month_year, values_from = nms1) %>% 
+  pivot_longer(4:31, names_to = "month_year", values_to = "nms1")
+
+### Exploratory graphs, checking assumptions
+nms1_hist <- nms1_df %>% 
+  ggplot() +
+  geom_histogram(aes(x = nms1)) +
+  facet_wrap(~month_year)
+#kind of normal-ish -- skewed left-ish
+nms1_qq <- nms1_df %>% 
+  ggplot() +
+  geom_qq(aes(sample = nms1)) +
+  facet_wrap(~month_year)
+#kind of normal-ish -- skewed left-ish
+nms1_normality <- nms1_df %>% 
+  group_by(month_year) %>% 
+  shapiro_test(nms1)
+
+### Repeated measures ANOVA for NMS1
+nms1_rmanova <- anova_test(data = nms1_df, nms1 ~ month_year, wid = replicate)
+#get_anova_table(nms1_rmanova)
+#p << .001, F(488) = 6.717, ges = .256
+#### Pairwise t-tests
+nms1_t_tests <- pairwise_t_test(data = nms1_df, nms1 ~ month_year, paired = TRUE, p.adjust.method = "bonferroni")
+
+
+
+### NMS1 by plot
+#### ANOVA
+nms1_anova_plot <- anova_test(data = nms1_df, nms1 ~ plot, wid = replicate)
+#get_anova_table(nms1_anova_plot)
+#p << .001, F = 5.848, ges = .06
+#### Pairwise t-tests
+nms1_t_plot <- pairwise_t_test(data = nms1_df, nms1 ~ plot, paired = TRUE, p.adjust.method = "bonferroni")
+nms1_t_plot_df <- as.data.frame(pairwise.t.test(nms1_df$nms1, nms1_df$plot)$p.value)
+#MS-PH1 p < .001, MS-RT p = .00594, MS-TP p = .210, MS-WT1 p = .062, MS-WT2 p < .001, PH1-CS p = .0898
+
+#### NMDS, with each replicate and species names
+### Community matrix dataframe
+nms1_plot_community_matrix <- np_nmds_df %>% 
+  clean_names() %>% 
+    mutate(plot = case_when(plot == "1" ~ "PH1", plot == "7" ~ "TP", plot == "4" ~ "RT", plot == "9" ~ "MS", plot == "14" ~ "WT1", plot == "16" ~ "WT2", plot == "19" ~ "CS")) %>% 
+  mutate(replicate_zone = case_when(replicate_zone == "1" ~ "C", replicate_zone == "2" ~ "T", replicate_zone == "3" ~ "U")) %>% 
+  mutate(replicate = paste(plot, replicate_zone, sep = "_"))
+
+### Community matrix dataframe
+np_community_matrix <- np_nmds_df %>% 
+  clean_names() %>% 
+    mutate(plot = case_when(plot == "1" ~ "PH1", plot == "7" ~ "TP", plot == "4" ~ "RT", plot == "9" ~ "MS", plot == "14" ~ "WT1", plot == "16" ~ "WT2", plot == "19" ~ "CS")) %>% 
+  mutate(replicate_zone = case_when(replicate_zone == "1" ~ "C", replicate_zone == "2" ~ "T", replicate_zone == "3" ~ "U")) %>% 
+  mutate(replicate = paste(plot, replicate_zone, sep = "_"))
+np_community_matrix <- np_nmds_df[, -c(1:5)]
+np_community_matrix <- np_community_matrix[, -c(2:10)]
+np_community_matrix <- np_community_matrix %>% 
+  column_to_rownames(var = "replicate_date")
+
+### NMDS, with each replicate and species names
+np_nmds <- metaMDS(np_community_matrix, distance = "bray", k=2, wascores = TRUE)
+np_nmds_scores <- np_nmds$species
+plot(np_nmds)
+orditorp(np_nmds, "species")
+orditorp(np_nmds,display="sites",cex=.25,air=0.01)
+
+
+```
+
+
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+# 1c. Do pools converge on the same exotic community composition over time? (NMDS)
+
+## Exotic community matrix
+exotic_community_matrix <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  filter(Native_Status == "E") %>% 
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "1", Replicate_Zone == "T" ~ "2", Replicate_Zone == "U" ~ "3")) %>% 
+  mutate(Plot = case_when(Plot == "PH1" ~ "1", Plot == "TP" ~ "7", Plot == "RT" ~ "4", Plot == "MS" ~ "9", Plot == "WT1" ~ "14", Plot == "WT2" ~ "16", Plot == "CS" ~"19")) %>% 
+  group_by(date, month_number, Year, Plot, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate_Zone, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0))) %>% 
+  column_to_rownames("replicate_date") %>% 
+  select(7:70)
+
+## Exotic community matrix variables
+exotic_community_matrix_variables <- exotic_community_matrix %>% 
+  rownames_to_column(var = "replicate_date") %>% 
+  select(replicate_date) %>% 
+  inner_join(np_community_matrix_variables)
+
+#exotic_nmds <- metaMDS(exotic_community_matrix)
+#stressplot(exotic_nmds)
+#Generally, an average stress of > 0.2 is an indication that the ordination didn’t do a good job of representing community structure. However, NMDS stress increases as sample size increases, so if you have many samples (as this dataset does) your ordination will likely exhibit a lot of stress
+#stress = .00015
+
+exotic_nmds_scores <- scores(np_nmds, display = "sites") %>% 
+  as.data.frame() %>% 
+  rownames_to_column("replicate_date") %>% 
+  full_join(exotic_community_matrix_variables) %>% 
+  drop_na(Plot)
+
+exotic_nmds_fit <- envfit(exotic_nmds, exotic_community_matrix, perm = 999) #envfit() takes the output of metaMDS() and the species matrix you created
+
+exotic_nmds_fit_pvals <- exotic_nmds_fit$vectors$pvals %>% 
+  as.data.frame() %>% 
+  rownames_to_column("species") %>% 
+  dplyr::rename("pvals" = ".") #extract p-values for each species
+
+exotic_nmds_fit_coords <- exotic_nmds_fit %>% 
+  scores(., display = "vectors") %>% 
+  as.data.frame() %>% 
+  rownames_to_column("species") %>% 
+  full_join(., np_nmds_fit_pvals, by = "species") %>% 
+  filter(pvals == 0.001) #extract coordinates for species, only keep species with p-val = 0.001
+
+
+### NMDS for exotics, by plot, with species biplot
+exotic_nmds_plot_species_biplot <- ggplot(exotic_nmds_scores, aes(x = NMDS1, y = NMDS2)) +
+  coord_fixed() +
+  geom_point(aes(color = Plot)) +
+  stat_ellipse(aes(color = Plot)) +
+  geom_segment(data = exotic_nmds_fit_coords, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(0.25, "cm")),
+               col = "black") +
+  geom_text(data = exotic_nmds_fit_coords, aes(label = species), alpha = .75) +
+  theme_classic() +
+  labs(title = "NMDS of exotic community, by plot", caption = "PH1 has different community (post-hoc pairwise perMANOVA p = 0.021) \n WT1 also has slightly different community (post-hoc pairwise perMANOVA p = 0.021) \ MS also has slightly different community (post-hoc pairwise perMANOVA p - .021)")
+exotic_nmds_plot_species_biplot
+
+### perMANOVA, by plot
+exotic_plot_permanova <- adonis(exotic_community_matrix ~ Plot, data = exotic_community_matrix_variables)
+#p = .001
+###Post-hoc test
+exotic_plot_pairwise <- pairwise.adonis(exotic_community_matrix, exotic_community_matrix_variables$Plot)
+#PH1-WT1 p = .021, PH1-WT2 p = .063, PH1-CS p = .021, PH1-RT p = .021, PH1-TP p = .084, PH1-MS p = .021, WT1-CS p = .042, WT1-RT p = .021, WT1-MS p = .021, WT1-CS p = .021, WT1-RT p = .021, WT2-MS p = .021, CS-RT p = .021, CS-MS p = .021, RT-MS p = .021, MS-TP p = .021
+
+
+
+### NMDS for exotics, by zone, with species biplot
+exotic_nmds_zone_species_biplot <- ggplot(exotic_nmds_scores, aes(x = NMDS1, y = NMDS2)) +
+  coord_fixed() +
+  geom_point(aes(color = Replicate_Zone)) +
+  stat_ellipse(aes(color = Replicate_Zone)) +
+  geom_segment(data = exotic_nmds_fit_coords, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(0.25, "cm")),
+               col = "black") +
+  geom_text(data = exotic_nmds_fit_coords, aes(label = species), alpha = .75) +
+  theme_classic() +
+  labs(title = "NMDS of exotic community, by zone", caption = "Sig difference between center and transition zones (post-hoc pairwise perMANOVA p = 0.003) \n Sig difference between center and upland zones (post-hoc pairwise perMANOVA p = 0.003) \n Sig difference between transition and upland zones (post-hoc pairwise perMANOVA p = 0.003)")
+exotic_nmds_zone_species_biplot
+
+### perMANOVA, by zone
+exotic_zone_permanova <- adonis(exotic_community_matrix ~ Replicate_Zone, data = exotic_community_matrix_variables)
+#p = .001
+###Post-hoc test
+exotic_zone_pairwise <- pairwise.adonis(exotic_community_matrix, exotic_community_matrix_variables$Replicate_Zone)
+#C-T p = .003, C-U p = .003, T-U p = .003
+
+
+
+
+### NMDS for exotics, by age, with species biplot
+exotic_nmds_age_species_biplot <- ggplot(exotic_nmds_scores, aes(x = NMDS1, y = NMDS2)) +
+  coord_fixed() +
+  geom_point(aes(color = as.factor(age))) +
+  stat_ellipse(aes(color = as.factor(age))) +
+  geom_segment(data = exotic_nmds_fit_coords, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(0.25, "cm")),
+               col = "black") +
+  geom_text(data = exotic_nmds_fit_coords, aes(label = species), alpha = .75) +
+  theme_classic() +
+  labs(title = "NMDS of exotic community, by pool age", caption = "Sig difference in exotic community across age (perMANOVA p = 0.001)) -- community changes at year 4")
+exotic_nmds_age_species_biplot
+
+### perMANOVA, by age
+exotic_age_permanova <- adonis(exotic_community_matrix ~ age, data = exotic_community_matrix_variables)
+#p = .001
+###Post-hoc test
+exotic_age_pairwise <- pairwise.adonis(exotic_community_matrix, exotic_community_matrix_variables$age)
+#6-2 p = .028, 6-3 p = .056, 2-3 p = .028, 2-4 p = .028, 2-5 p = .028, 2-7 p = .028, 2-8 p = .028, 2-9 p = .028, 3-5 p = .028, 3-8 p = .028, 3-9 p = .028, 4-7 p = .028, 5-8 p = .028
+
+
+
+### NMDS for exotics, by month, with species biplot
+exotic_nmds_month_species_biplot <- ggplot(exotic_nmds_scores, aes(x = NMDS1, y = NMDS2)) +
+  coord_fixed() +
+  geom_point(aes(color = month)) +
+  stat_ellipse(aes(color = month)) +
+  geom_segment(data = exotic_nmds_fit_coords, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(0.25, "cm")),
+               col = "black") +
+  geom_text(data = exotic_nmds_fit_coords, aes(label = species), alpha = .75) +
+  theme_classic() +
+  labs(title = "NMDS of exotic community, by monitoring month", caption = "Slight sig differences in exotic community between months")
+#exotic_nmds_month_species_biplot
+
+### perMANOVA, by month
+exotic_month_permanova <- adonis(exotic_community_matrix ~ month, data = exotic_community_matrix_variables)
+#p = .001
+###Post-hoc test
+exotic_month_pairwise <- pairwise.adonis(exotic_community_matrix, exotic_community_matrix_variables$month)
+#p = .055 for some Dec, Jan, Feb, March, April, May, 
+
+
+
+### NMDS for exotics, by year, with species biplot
+exotic_nmds_year_species_biplot <- ggplot(exotic_nmds_scores, aes(x = NMDS1, y = NMDS2)) +
+  coord_fixed() +
+  geom_point(aes(color = as.factor(Year))) +
+  stat_ellipse(aes(color = as.factor(Year))) +
+  geom_segment(data = exotic_nmds_fit_coords, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(0.25, "cm")),
+               col = "black") +
+  geom_text(data = exotic_nmds_fit_coords, aes(label = species), alpha = .75) +
+  theme_classic() +
+  labs(title = "NMDS of exotic community, by montoring year", caption = "Sig difference in exotic community between years (perMANOVA p = 0.001)")
+exotic_nmds_year_species_biplot
+
+### perMANOVA, by month
+exotc_year_permanova <- adonis(exotic_community_matrix ~ Year, data = exotic_community_matrix_variables)
+#p = .001
+###Post-hoc test
+exotic_year_pairwise <- pairwise.adonis(exotic_community_matrix, exotic_community_matrix_variables$Year)
+#all p = .006
+
+```
+# 2. Is the community changing?
+
+## 2a. Is the whole community changing?
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 2a. Is the whole community changing?
+
+## Community matrix
+np_community_matrix <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "1", Replicate_Zone == "T" ~ "2", Replicate_Zone == "U" ~ "3")) %>% 
+  mutate(Plot = case_when(Plot == "PH1" ~ "1", Plot == "TP" ~ "7", Plot == "RT" ~ "4", Plot == "MS" ~ "9", Plot == "WT1" ~ "14", Plot == "WT2" ~ "16", Plot == "CS" ~"19")) %>% 
+  group_by(date, month_number, Year, Plot, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate_Zone, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0))) %>% 
+  column_to_rownames("replicate_date") %>% 
+  select(7:141)
+
+#np_nmds <- metaMDS(np_community_matrix)
+#stressplot(np_nmds)
+#Generally, an average stress of > 0.2 is an indication that the ordination didn’t do a good job of representing community structure. However, NMDS stress increases as sample size increases, so if you have many samples (as this dataset does) your ordination will likely exhibit a lot of stress
+
+np_nmds_scores <- scores(np_nmds, display = "sites") %>% 
+  as.data.frame() %>% 
+  rownames_to_column("replicate_date") %>% 
+  full_join(np_community_matrix_variables)
+
+np_nmds_fit <- envfit(np_nmds, np_community_matrix, perm = 999) #envfit() takes the output of metaMDS() and the species matrix you created
+
+np_nmds_fit_pvals <- np_nmds_fit$vectors$pvals %>% 
+  as.data.frame() %>% 
+  rownames_to_column("species") %>% 
+  dplyr::rename("pvals" = ".") #extract p-values for each species
+
+np_nmds_fit_coords <- np_nmds_fit %>% 
+  scores(., display = "vectors") %>% 
+  as.data.frame() %>% 
+  rownames_to_column("species") %>% 
+  full_join(., np_nmds_fit_pvals, by = "species") %>% 
+  filter(pvals == 0.001) #extract coordinates for species, only keep species with p-val = 0.001
+
+
+
+### NMDS, by plot, with species biplot
+np_nmds_plot_species_biplot <- ggplot(np_nmds_scores, aes(x = NMDS1, y = NMDS2)) +
+  coord_fixed() +
+  geom_point(aes(color = Plot)) +
+  stat_ellipse(aes(color = Plot)) +
+  geom_segment(data = np_nmds_fit_coords, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(0.25, "cm")),
+               col = "black") +
+  geom_text(data = np_nmds_fit_coords, aes(label = species)) +
+  theme_classic() +
+  labs(title = "NMDS, by plot", caption = "PH1 has different community (post-hoc pairwise perMANOVA p = 0.021) \n RT also has slightly different community (post-hoc pairwise perMANOVA p = 0.021)")
+np_nmds_plot_species_biplot
+
+### perMANOVA, by plot
+np_plot_permanova <- adonis(np_community_matrix ~ Plot, data = np_community_matrix_variables)
+#p = .001
+###Post-hoc test
+np_plot_pairwise <- pairwise.adonis(np_community_matrix, np_community_matrix_variables$Plot)
+#PH1-RT p = .021, PH1-TP p = .021, PH1-MS p = .021, PH1-WT1 p = .021, PH1-WT2 p = .021, PH1-CS p = .021, RT-MS p = .021, RT-WT2 p = .021, RT-CS p = .021, TP-WT2 p = .063
+
+
+
+### NMDS, by zone, with species biplot
+np_nmds_zone_species_biplot <- ggplot(np_nmds_scores, aes(x = NMDS1, y = NMDS2)) +
+  coord_fixed() +
+  geom_point(aes(color = Replicate_Zone)) +
+  stat_ellipse(aes(color = Replicate_Zone)) +
+  geom_segment(data = np_nmds_fit_coords, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(0.25, "cm")),
+               col = "black") +
+  geom_text(data = np_nmds_fit_coords, aes(label = species)) +
+  theme_classic() +
+  labs(title = "NMDS, by zone", caption = "Sig difference between center and transition zones (post-hoc pairwise perMANOVA p = 0.059) \n Sig difference between center and upland zones (post-hoc pairwise perMANOVA p = 0.044)")
+np_nmds_zone_species_biplot
+
+### perMANOVA, by zone
+np_zone_permanova <- adonis(np_community_matrix ~ Replicate_Zone, data = np_community_matrix_variables)
+#p = .068
+###Post-hoc test
+np_zone_pairwise <- pairwise.adonis(np_community_matrix, np_community_matrix_variables$Replicate_Zone)
+#C-T p = .059, C-U p = .044
+
+### NMDS, by age, with species biplot
+np_nmds_age_species_biplot <- ggplot(np_nmds_scores, aes(x = NMDS1, y = NMDS2)) +
+  coord_fixed() +
+  geom_point(aes(color = as.factor(age))) +
+  stat_ellipse(aes(color = as.factor(age))) +
+  geom_segment(data = np_nmds_fit_coords, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(0.25, "cm")),
+               col = "black") +
+  geom_text(data = np_nmds_fit_coords, aes(label = species), alpha = .75) +
+  theme_classic() +
+  labs(title = "NMDS, by pool age", caption = "Sig difference in community across age (perMANOVA p = 0.001)) -- community changes at year 6")
+np_nmds_age_species_biplot
+
+### perMANOVA, by age
+np_age_permanova <- adonis(np_community_matrix ~ age, data = np_community_matrix_variables)
+#p = .001
+###Post-hoc test
+np_age_pairwise <- pairwise.adonis(np_community_matrix, np_community_matrix_variables$age)
+#7-8 p = .086, 7-9 p = .048, 7-6 p = .001, 7-5 p = .001, 7-4 p = .001, 7-3 p = .001, 7-2 p = .001, 8-6 p = .001, 8-5 p = .001, 8-4 p = .001, 8-3 p = .001, 8-2 p = .001, 9-6 p = .001, 9-5 p = .001, 9-4 p = .001, 9-3 p = .001, 9-2 p = .001, 6-5 p = .073, 6-4 p = .002, 6-3 p = .015, 6-2 p = .011
+
+
+
+### NMDS, by month, with species biplot
+np_nmds_month_species_biplot <- ggplot(np_nmds_scores, aes(x = NMDS1, y = NMDS2)) +
+  coord_fixed() +
+  geom_point(aes(color = month)) +
+  stat_ellipse(aes(color = month)) +
+  geom_segment(data = np_nmds_fit_coords, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(0.25, "cm")),
+               col = "black") +
+  geom_text(data = np_nmds_fit_coords, aes(label = species), alpha = .75) +
+  theme_classic() +
+  labs(title = "NMDS, by monitoring month", caption = "No sig difference in community across monitoring months (perMANOVA p = 0.866))")
+np_nmds_month_species_biplot
+
+### perMANOVA, by month
+np_month_permanova <- adonis(np_community_matrix ~ month, data = np_community_matrix_variables)
+#p = .866
+
+
+
+
+### NMDS, by year, with species biplot
+np_nmds_year_species_biplot <- ggplot(np_nmds_scores, aes(x = NMDS1, y = NMDS2)) +
+  coord_fixed() +
+  geom_point(aes(color = as.factor(Year))) +
+  stat_ellipse(aes(color = as.factor(Year))) +
+  geom_segment(data = np_nmds_fit_coords, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(0.25, "cm")),
+               col = "black") +
+  geom_text(data = np_nmds_fit_coords, aes(label = species), alpha = .75) +
+  theme_classic() +
+  labs(title = "NMDS, by montoring year", caption = "Slight difference in community \n between 2017-2019 (post-hoc pairwise perMANOVA p = 0.066) \n and between 2016-2018 (post-hoc pairwise perMANOVA p = 0.084)")
+np_nmds_year_species_biplot
+
+### perMANOVA, by month
+np_year_permanova <- adonis(np_community_matrix ~ Year, data = np_community_matrix_variables)
+#p = .099
+###Post-hoc test
+np_year_pairwise <- pairwise.adonis(np_community_matrix, np_community_matrix_variables$Year)
+#2017-2019 p = .066, 2016-2018 p = .084
+
+```
+
+## 2b. Is the native community changing?
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 2a. Is the native community changing?
+
+## Native community matrix
+native_community_matrix <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  filter(Native_Status == "N") %>% 
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "1", Replicate_Zone == "T" ~ "2", Replicate_Zone == "U" ~ "3")) %>% 
+  mutate(Plot = case_when(Plot == "PH1" ~ "1", Plot == "TP" ~ "7", Plot == "RT" ~ "4", Plot == "MS" ~ "9", Plot == "WT1" ~ "14", Plot == "WT2" ~ "16", Plot == "CS" ~"19")) %>% 
+  group_by(date, month_number, Year, Plot, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate_Zone, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0))) %>% 
+  column_to_rownames("replicate_date") %>% 
+  select(7:68)
+
+## Native community matrix variables
+native_community_matrix_variables <- native_community_matrix %>% 
+  rownames_to_column(var = "replicate_date") %>% 
+  select(replicate_date) %>% 
+  inner_join(np_community_matrix_variables)
+
+#native_nmds <- metaMDS(native_community_matrix, maxit = 4000)
+#stressplot(native_nmds)
+#Generally, an average stress of > 0.2 is an indication that the ordination didn’t do a good job of representing community structure. However, NMDS stress increases as sample size increases, so if you have many samples (as this dataset does) your ordination will likely exhibit a lot of stress
+
+```
+
+# 2. What environmental filters can be manipulated to decrease exotics?
+## 2a. How does the seedbank compare to the aboveground cover?
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 2a. How does the seedbank compare to the aboveground cover? (presence/absence data)
+
+## Add Year column to seedbank_2016, add presence/absence column
+seedbank_2016_pa <- seedbank_2016 %>%
+  add_column(Year = 2016) %>% 
+  group_by(Year, Plot, Replicate_Zone, Species_Full_Name, Native_Status) %>% 
+  summarize(
+    max = max(Count)
+  ) %>% 
+  filter(max>0) %>% 
+  add_column(present = 1)
+
+## Add presence/absence column to 2017 percent cover data, join to 2016 seed bank
+pa_2016_2017 <- np_percent_cover %>% 
+  filter(Year == "2017") %>% 
+  group_by(Year, Plot, Replicate_Zone, Species_Full_Name, Native_Status) %>% 
+  summarize(
+    max = max(percent_cover)
+  ) %>% 
+  add_column(present = 1) %>% 
+  full_join(seedbank_2016_pa) %>% 
+  na.omit()
+
+## Plot exotics in 2016 seed bank vs. 2017, by zone, for RT
+rt_exotic_pa <- pa_2016_2017 %>% 
+  filter(Native_Status == "E") %>% 
+  filter(Plot == "RT") %>% 
+  ggplot(aes(x = Species_Full_Name, y = present)) +
+  geom_col(aes(fill = as.factor(Year))) +
+  facet_wrap(~Replicate_Zone) +
+  scale_fill_manual(values = c("darkgreen", "chartreuse4"), label = c("2016 seed bank", "2017 monitoring"), name = "Year") +
+    labs(title = "RT: Exotic Species in Seed Bank vs. Monitoring", x = "Species", y = "Presence", caption = "More exotics coming up in upland zone than are in seed bank") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90))
+rt_exotic_pa
+
+# Scatter comparing 2016 vs 2017 presence/absence
+exotic_pa_scatter <- pa_2016_2017 %>% 
+  filter(Native_Status == "E") %>% 
+  spread(Year, present) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(sixteen = "2016") %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  ggplot(aes(x = sixteen, y = seventeen)) +
+  geom_jitter(aes(color = Species_Full_Name, shape = Plot)) +
+  facet_wrap(~Replicate_Zone) +
+  scale_fill_manual(values = c("darkgreen", "chartreuse4"), label = c("2016 seed bank", "2017 monitoring"), name = "Year") +
+    labs(title = "Exotic Species in Seed Bank vs. Monitoring", x = "Species", y = "Presence", caption = "More exotics coming up in upland zone than are in seed bank") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90))
+ggplotly(exotic_pa_scatter)
+
+
+# Plot % cover for seed bank + monitoring species
+exotic_pa_cover_both <- pa_2016_2017 %>% 
+  filter(Native_Status == "E") %>% 
+  spread(Year, present) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(sixteen = "2016") %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  mutate(both = seventeen + sixteen) %>% 
+  filter(both == 2) %>% 
+  ggplot(aes(y = max, x = Species_Full_Name)) +
+  geom_point(aes(color = Plot)) +
+  facet_wrap(~Replicate_Zone) +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 5)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90))
+exotic_pa_cover_both
+
+# Plot % cover for just monitoring species
+exotic_pa_cover <- pa_2016_2017 %>% 
+  filter(Native_Status == "E") %>% 
+  spread(Year, present) %>% 
+  rename(seventeen = "2017") %>% 
+  rename(sixteen = "2016") %>% 
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>% 
+  mutate(both = seventeen + sixteen) %>% 
+  filter(seventeen == 1) %>% 
+  filter(both == 1) %>% 
+  ggplot(aes(y = max, x = Species_Full_Name)) +
+  geom_point(aes(color = Plot)) +
+  facet_wrap(~Replicate_Zone) +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 45)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90))
+exotic_pa_cover
+
+```
+
+
+
+## 2b. Does active management result in a different exotic community?
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 2b. Does active management result in a different exotic community? (NMDS w/ old Del Sol data)
+
+# Plot Del Sol percent cover
+del_sol_cover <- del_sol %>% 
+  full_join(metadata) %>% 
+  drop_na(Plot) %>% 
+  group_by(Plot, Species_Full_Name, Native_Status) %>% 
+  summarize(
+    cover = mean(cover)
+  )
+
+del_sol_cover_scatter <- ggplot(del_sol_cover, aes(x = Species_Full_Name, y = cover)) +
+  geom_point(aes(color = Plot)) +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 70)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  facet_wrap(~Native_Status)
+del_sol_cover_scatter
+
+# Plot Del Sol vs. NP 2017 percent cover, using mean of each species
+del_sol_cover_col <-  np_percent_cover %>% 
+  filter(Year == "2017") %>% 
+  group_by(Year, Plot, Replicate_Zone, Species_Full_Name, Native_Status) %>% 
+  summarize(
+    cover = max(percent_cover)
+  ) %>% 
+  full_join(del_sol_cover) %>% 
+  drop_na(Native_Status) %>% 
+  ggplot(aes(x = reorder(Species_Full_Name, -cover), y = cover)) +
+  geom_col(aes(fill = as.factor(Year)), position = "dodge") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  facet_wrap(~Native_Status)
+del_sol_cover_col
+
+```
+
+
