@@ -41,7 +41,7 @@ np_percent_cover_master <- read_csv("np_percent_cover.csv")
 metadata <- read_csv("metadata.csv")
 np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
 np_2018_seed_bank_master <- read_csv("np.2018.seed.bank.csv")
-biomass_master <- read_csv("biomass.csv")
+biomass_master <- read_csv("combined_biomass.csv")
 del_sol <- read_csv("delsol.csv")
 noaa <- read_csv("1567450.csv")
 np_pc_ord <- read_csv("pc-ord_nms_scores.csv")
@@ -390,6 +390,53 @@ np_nmds_scores <- np_nmds$species
 plot(np_nmds)
 orditorp(np_nmds, "species")
 orditorp(np_nmds,display="sites",cex=.25,air=0.01, alpha =  .5)
+
+
+
+
+
+
+
+### NMS1 by plot
+#### ANOVA
+nms1_anova_plot <- anova_test(data = nms1_df, nms1 ~ plot, wid = replicate)
+#get_anova_table(nms1_anova_plot)
+#p << .001, F = 5.848, ges = .06
+#### Pairwise t-tests
+nms1_t_plot <- pairwise_t_test(data = nms1_df, nms1 ~ plot, paired = TRUE, p.adjust.method = "bonferroni")
+nms1_t_plot_df <- as.data.frame(pairwise.t.test(nms1_df$nms1, nms1_df$plot)$p.value)
+#MS-PH1 p < .001, MS-RT p = .00594, MS-TP p = .210, MS-WT1 p = .062, MS-WT2 p < .001, PH1-CS p = .0898
+
+#### NMDS, with each replicate and species names
+### Community matrix dataframe
+nms1_plot_community_matrix <- np_nmds_df %>% 
+  clean_names() %>% 
+    mutate(plot = case_when(plot == "1" ~ "PH1", plot == "7" ~ "TP", plot == "4" ~ "RT", plot == "9" ~ "MS", plot == "14" ~ "WT1", plot == "16" ~ "WT2", plot == "19" ~ "CS")) %>% 
+  mutate(replicate_zone = case_when(replicate_zone == "1" ~ "C", replicate_zone == "2" ~ "T", replicate_zone == "3" ~ "U")) %>% 
+  mutate(replicate = paste(plot, replicate_zone, sep = "_"))
+
+### Community matrix dataframe
+np_community_matrix <- np_nmds_df %>% 
+  clean_names() %>% 
+    mutate(plot = case_when(plot == "1" ~ "PH1", plot == "7" ~ "TP", plot == "4" ~ "RT", plot == "9" ~ "MS", plot == "14" ~ "WT1", plot == "16" ~ "WT2", plot == "19" ~ "CS")) %>% 
+  mutate(replicate_zone = case_when(replicate_zone == "1" ~ "C", replicate_zone == "2" ~ "T", replicate_zone == "3" ~ "U")) %>% 
+  mutate(replicate = paste(plot, replicate_zone, sep = "_"))
+np_community_matrix <- np_nmds_df[, -c(1:5)]
+np_community_matrix <- np_community_matrix[, -c(2:10)]
+np_community_matrix <- np_community_matrix %>% 
+  column_to_rownames(var = "replicate_date")
+
+### NMDS, with each replicate and species names
+np_nmds <- metaMDS(np_community_matrix, distance = "bray", k=2, wascores = TRUE)
+np_nmds_scores <- np_nmds$species
+plot(np_nmds)
+orditorp(np_nmds, "species")
+orditorp(np_nmds,display="sites",cex=.25,air=0.01)
+
+
+
+
+
 
 
 
