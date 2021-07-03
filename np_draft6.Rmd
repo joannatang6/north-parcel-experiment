@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r include = FALSE}
 
-# Loading packages, read in data
+# Loading packages, read in data  
 library(pairwiseAdonis)
 library(kableExtra)
 library(vegan)
@@ -33,6 +33,7 @@ library(plotrix)
 library(janitor)
 library(ggpubr)
 library(rstatix)
+library(NbClust)
 library(tidyverse)
 
 np_percent_cover_master <- read_csv("np_percent_cover.csv")
@@ -832,6 +833,16 @@ exotic_year_permanova <- adonis(exotic_community_matrix ~ Year, data = exotic_co
 exotic_year_pairwise <- pairwise.adonis(exotic_community_matrix, exotic_community_matrix_variables$Year)
 #all p = .006, except for 2016-2018 p = .024
 
+
+### Partition-based cluster analysis
+exotic_kmeans <- kmeans(exotic_nmds_scores[2:3], 3)
+
+exotic_clusters <- data.frame(exotic_nmds_scores, cluster_no = factor(exotic_kmeans$cluster))
+
+exotic_clusters <- ggplot(exotic_clusters) +
+  geom_point(aes(x = NMDS1, y = NMDS2, color = cluster_no, pch = Replicate_Zone))
+exotic_clusters
+
 ```
 
 
@@ -990,6 +1001,17 @@ np_year_permanova <- adonis(np_community_matrix ~ Year, data = np_community_matr
 ###Post-hoc test
 np_year_pairwise <- pairwise.adonis(np_community_matrix, np_community_matrix_variables$Year)
 #2017-2019 p = .004, 2018-2019 p = .013, 2016-2017 p = .087
+
+
+### Partition-based cluster analysis
+np_kmeans <- kmeans(np_nmds_scores[2:3], 3)
+
+np_clusters <- data.frame(np_nmds_scores, cluster_no = factor(np_kmeans$cluster))
+
+np_clusters <- ggplot(np_clusters) +
+  geom_point(aes(x = NMDS1, y = NMDS2, color = cluster_no, pch = Replicate_Zone)) +
+  labs(title = "Partition-based cluster analysis, by zone")
+np_clusters
 
 ```
 
@@ -1157,6 +1179,17 @@ native_year_permanova <- adonis(native_community_matrix ~ Year, data = native_co
 ###Post-hoc test
 native_year_pairwise <- pairwise.adonis(native_community_matrix, native_community_matrix_variables$Year)
 #2017-2018 p = .348, 2017-2019 p = .264
+
+
+### Partition-based cluster analysis
+native_kmeans <- kmeans(native_nmds_scores[2:3], 3)
+
+native_clusters <- data.frame(native_nmds_scores, cluster_no = factor(native_kmeans$cluster))
+
+native_clusters <- ggplot(native_clusters) +
+  geom_point(aes(x = NMDS1, y = NMDS2, color = cluster_no, pch = Replicate_Zone)) +
+  labs(title = "Partition-based cluster analysis, by zone")
+native_clusters
 
 
 
@@ -1527,6 +1560,16 @@ ds_np_site_permanova <- adonis(ds_np_community_matrix ~ site, data = ds_np_commu
 ###Post-hoc test
 ds_np_site_pairwise <- pairwise.adonis(ds_np_community_matrix, ds_np_community_matrix_variables$site)
 #p = .1117
+
+### Partition-based cluster analysis
+ds_np_kmeans <- kmeans(ds_np_nmds_scores[2:3], 2)
+
+ds_np_clusters <- data.frame(ds_np_nmds_scores, cluster_no = factor(ds_np_kmeans$cluster))
+
+ds_np_clusters <- ggplot(ds_np_clusters) +
+  geom_point(aes(x = NMDS1, y = NMDS2, color = cluster_no, pch = site)) +
+  labs(title = "Partition-based cluster analysis, by site")
+ds_np_clusters
 
 
 
@@ -1915,6 +1958,15 @@ seedbank_site_permanova <- adonis(seedbank_community_matrix ~ as.factor(seedbank
 seedbank_site_pairwise <- pairwise.adonis(seedbank_community_matrix, seedbank_community_matrix_variables$seedbank)
 #all p = .003
 
+### Partition-based cluster analysis
+seedbank_kmeans <- kmeans(seedbank_nmds_scores[2:3], 3)
+
+seedbank_clusters <- data.frame(seedbank_nmds_scores, cluster_no = factor(seedbank_kmeans$cluster))
+
+seedbank_clusters <- ggplot(seedbank_clusters) +
+  geom_point(aes(x = NMDS1, y = NMDS2, color = cluster_no, pch = seedbank)) +
+  labs(title = "Partition-based cluster analysis, by source")
+seedbank_clusters
 
 
 
@@ -1925,7 +1977,8 @@ seedbank_site_pairwise <- pairwise.adonis(seedbank_community_matrix, seedbank_co
 
 
 
-## Community matrix with all Del Sol and North Parcel data
+
+ ## Community matrix with all Del Sol and North Parcel data
 ds_np_pc <- del_sol %>% 
   select(Year, Plot, Quadrat, Species, Native_Status, cover) %>% 
   mutate("Replicate_Zone" = as.character(Quadrat)) %>% 
