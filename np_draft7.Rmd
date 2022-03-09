@@ -828,4 +828,17 @@ np_dominant <- np_percent_cover %>%
 #dominant exotics: FEPE, FEMY, POMO, CETE, BRDI, GEDI, PLCO, POAN, SPSP, BRHO, CRSC, LYHY
 #dominant natives: ELMA, STPU, JUPH, JUME, HOBR, BOMA, CAPR, CYER, JUBU, ERVA, ALSA, JUPA, MALE, SIBE, CEPA, ELTR, EPCA, ELGL, SCPU, SYSU, DEFA, FRSA
 
+## Average natives/nonnatives per zone
+np_zone_richness <- np_percent_cover %>%
+  filter(Native_Status != "NA") %>% 
+  filter(Year > 2016) %>% 
+  group_by(Plot, Replicate_Zone, Species_Full_Name, Native_Status) %>% 
+  summarize(mean = mean(percent_cover)) %>% 
+  filter(mean>0) %>% 
+  drop_na() %>% 
+  group_by(Plot, Replicate_Zone, Native_Status) %>% 
+  summarize(richness = length(mean)) %>% 
+  group_by(Replicate_Zone, Native_Status) %>% 
+  summarize(mean_richness = mean(richness))
+
 ```
