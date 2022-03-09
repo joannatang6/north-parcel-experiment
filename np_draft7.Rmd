@@ -1,0 +1,831 @@
+---
+title: "NP Draft 7"
+author: "Joanna Tang"
+date: "12/5/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include = FALSE}
+
+# Loading packages, read in data  
+library(pairwiseAdonis)
+library(kableExtra)
+library(vegan)
+library(car)
+library(RColorBrewer)
+library(reshape2)
+library(kableExtra)
+library(FSA)
+library(plotly)
+library(ggsignif)
+library(lme4)
+library(lmerTest)
+library(emmeans)
+library(bestNormalize)
+library(betareg)
+library(nlme)
+library(MASS)
+library(fitdistrplus)
+library(plotrix)
+library(janitor)
+library(ggpubr)
+library(rstatix)
+library(NbClust)
+library(betareg)
+library(glmmTMB)
+library(tidyverse)
+
+
+np_percent_cover_master <- read_csv("np_percent_cover.csv")
+metadata <- read_csv("metadata.csv")
+np_2016_seedbank_master <- read_csv("np_2016_seedbank.csv")
+np_2018_seed_bank_master <- read_csv("np.2018.seed.bank.csv")
+del_sol_seedbank_master <- read_csv("del_sol_seedbank.csv")
+biomass_master <- read_csv("combined_biomass.csv")
+del_sol_master <- read_csv("delsol.csv")
+noaa <- read_csv("1567450.csv")
+np_pc_ord <- read_csv("pc-ord_nms_scores.csv")
+np_community_matrix_variables <- read_csv("np_community_matrix_variables.csv")
+hydro <- read_csv("2019_np_hydro_size.csv")
+
+
+```
+
+
+```{r include = FALSE}
+
+# Outline
+
+# 0. Tidy up data
+
+# 1. Is sustained weeding effort a successful long-term restoration strategy?
+## 1a. How does total exotic percent cover, biomass, and diversity change with age of pool? (boxplots)
+## 1b. Do pools converge on the same exotic community composition over time? (NMDS, cluster)
+##1c. Is the whole community changing? (NMDS, cluster)
+##1d. Is the native community changing? (NMDS, cluster, column graphs)
+
+
+```
+
+```{r include = FALSE}
+
+# 0. Tidy up data
+
+## Create new data frame with creation year of each pool
+creation_year_df <- data.frame(Plot = c("PH1", "TP", "RT", "MS", "WT1", "WT2", "CS"), Creation_Year = c("2010", "2012", "2012", "2015", "2014", "2014", "2013"))
+
+## Separate "Replicate" label into Replicate_Zone and Replicate_Number, join with species metadata, convert month and year to "date" column
+np_percent_cover <- np_percent_cover_master %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3"))
+np_percent_cover <- full_join(np_percent_cover, metadata) %>% 
+  mutate(month_number = case_when(Month == "JANUARY" ~ 1, Month == "FEBRUARY" ~ 2, Month == "MARCH" ~ 3, Month == "APRIL" ~ 4, Month == "MAY" ~ 5, Month == "JUNE" ~ 6, Month == "JULY" ~ 7, Month == "AUGUST" ~ 8, Month == "SEPTEMBER" ~ 9, Month == "OCTOBER" ~ 10, Month == "NOVEMBER" ~ 11, Month == "DECEMBER" ~ 12)) %>% 
+  mutate(date = paste(Year, month_number, "1", sep="-" )) %>% 
+  dplyr::select(-X8)
+np_percent_cover$date = as.Date(np_percent_cover$date)
+
+
+## Convert np_2016_seedbank into tidy format, remove NAs, separate "Replicate" label into Replicate_Zone and Replicate_Number, add Year column, add seedbank column, join to metadata
+seedbank_2016 <- gather(np_2016_seedbank_master, key = "Species", value = "Count", -c(Plot, Replicate)) %>% 
+  na.omit(np_2016_seedbank_master) %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3")) %>% 
+  filter(Count>0) %>%
+  add_column(Year = 2016) %>% 
+  add_column(seedbank = "seedbank_2016") %>% 
+  full_join(metadata)
+
+## Calculate total abundance of each species per Replicate for North Parcel 2018 seed bank data, separate "Replicate" label into Replicate_Zone and Replicate_Number, add Year column, add seedbank column, join to metadata
+np_seedbank_2018 <- np_2018_seed_bank_master %>% 
+  group_by(Plot, Replicate, Species) %>% 
+  summarize(Count = sum(Count)) %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3")) %>% 
+  add_column(Year = 2018) %>% 
+  add_column(seedbank = "seedbank_2018") %>% 
+  full_join(metadata)
+
+## Calculate total abundance of each species per Replicate for Del Sol 2018 seed bank data, separate "Replicate" label into Replicate_Zone and Replicate_Number, add Year column, add seedbank column, join to metadata
+del_sol_seedbank <- del_sol_seedbank_master %>% 
+  group_by(Plot, Replicate, Species) %>% 
+  summarize(Count = sum(Count)) %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  mutate(Replicate_Number = case_when(Replicate == "C1" ~ "1", Replicate == "C2" ~ "2", Replicate == "C3" ~ "3", Replicate == "T1" ~ "1", Replicate == "T2" ~ "2", Replicate == "T3" ~ "3", Replicate == "U1" ~ "1", Replicate == "U2" ~ "2", Replicate == "U3" ~ "3")) %>% 
+  add_column(Year = 2018) %>% 
+  add_column(seedbank = "del_sol_seedbank_2018") %>% 
+  full_join(metadata)
+
+## Join Del Sol % cover data to metadata
+del_sol <- full_join(del_sol_master, metadata)
+
+
+## Join biomass to metadata
+annual_exotic_biomass <- biomass_master %>% 
+  filter(Year>2016) %>% 
+  filter(Year<2020) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  drop_na(Time_Since) %>% 
+  mutate(Replicate_Zone = case_when(Replicate == "C1" ~ "C", Replicate == "C2" ~ "C", Replicate == "C3" ~ "C", Replicate == "T1" ~ "T", Replicate == "T2" ~ "T", Replicate == "T3" ~ "T", Replicate == "U1" ~ "U", Replicate == "U2" ~ "U", Replicate == "U3" ~ "U")) %>% 
+  drop_na(Replicate_Zone) %>% 
+  group_by(Year, Plot, Replicate_Zone, Replicate, Creation_Year, Time_Since) %>% 
+  summarize(annual_biomass = sum(biomass_g)) %>% 
+  mutate(plot_replicate = paste(Plot, Replicate, sep = "-"))
+
+
+
+```
+
+
+# 1. Is sustained weeding effort a successful long-term restoration strategy?
+
+## 1a. How does total exotic percent cover, biomass, and diversity change with age of pool?
+
+Hypothesis: If sustained weeding (routine weed-whacking, monthly hand-weeding) is successful, total exotic cover will remain low.
+
+Results: Significant increase in exotic H' in upland zone at year 4.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+# 1a. How does total exotic percent cover, biomass, and diversity change with age of pool? (boxplots)
+
+## Create new data frame with creation year of each pool
+creation_year_df <- data.frame(Plot = c("PH1", "TP", "RT", "MS", "WT1", "WT2", "CS"), Creation_Year = c("2010", "2012", "2012", "2015", "2014", "2014", "2013"))
+
+## Calculate total exotic % cover per quadrat, find max total exotic % cover per quadrat per year, add time since restoration column, add depth (from max 2019 hydro)
+np_annual_total_exotic <- np_percent_cover %>%
+  filter(Native_Status == "E") %>% 
+  filter(Year > 2016) %>% 
+  group_by(date, Year, Month, Plot, Replicate, Replicate_Zone) %>% 
+  summarize(total_exotic_pc = sum(percent_cover)) %>% 
+  drop_na() %>% 
+  group_by(Year, Plot, Replicate, Replicate_Zone) %>% 
+  summarize(max_annual_exotic_pc = max(total_exotic_pc)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  mutate(plot_replicate = paste(Plot, Replicate, sep = "-")) %>% 
+  full_join(hydro)
+
+### Check for normality
+exotic_pc_hist <- ggplot(np_annual_total_exotic, aes(x = max_annual_exotic_pc)) +
+  geom_histogram()
+#not normal -- skewed right
+exotic_pc_qq <- ggplot(np_annual_total_exotic, aes(sample = max_annual_exotic_pc)) +
+  geom_qq()
+#not normal -- skewed right
+
+## Boxplot of total exotic % cover, by zone, by time since
+exotic_pc_time_box <- np_annual_total_exotic %>% 
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "Central",  Replicate_Zone == "T" ~ "Transition", Replicate_Zone == "U" ~ "Upland")) %>%
+  ggplot(aes(x = as.factor(Time_Since), y = max_annual_exotic_pc)) +
+  geom_boxplot(fill = "coral3") +
+  geom_jitter(width = .2, alpha = .4) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Total Percent Cover of Exotics, over time", x = "Age of Pool (years)", y = "Percent Cover (%)", caption = "Sig increase around 5 in transition and upland \n (Sig increase in transition and upland over time)") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 100))
+exotic_pc_time_box
+
+### LMER for exotic % cover (log-transformed)
+exotic_pc_lmer <- lmer(log(max_annual_exotic_pc) ~ as.factor(Time_Since) + Replicate_Zone + as.factor(Time_Since):Replicate_Zone + (1|Year) + (1|plot_replicate), np_annual_total_exotic)
+#summary(exotic_pc_lmer)
+#some age, age:upland and age:transition sig
+#### Check diagnostic graphs
+#E1 <- resid(exotic_pc_lmer)
+#F1 <- fitted(exotic_pc_lmer)
+#plot(x=F1, y=E1, xlab="Fitted Model Values", ylab="Pearson Residuals", main="Variance") #run 2 lines together -- assessing homoskedasticity -- you want to see no pattern
+#abline(h=0)
+#qqnorm(E1, ylab="Pearson Residuals")
+#qqline(E1) #run 2 lines together -- assess if model residuals are normally distributed
+#qqnorm(ranef(exotic_pc_lmer)$plot_replicate[,1], main = "Quadrat Residuals")
+#qqline(ranef(exotic_pc_lmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_pc_lmer)$Year[,1], main = "Monitoring Year Residuals")
+#qqline(ranef(exotic_pc_lmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#### ANOVA of lmer
+exotic_pc_lmer_anova <- anova(exotic_pc_lmer)
+#### Tukey's post-hoc of least-squares means
+exotic_pc_lmer_tukey <- emmeans(exotic_pc_lmer, pairwise ~ as.factor(Time_Since) | Replicate_Zone, adjust = "tukey")
+#plot(exotic_pc_lmer_tukey, comparisons = TRUE)
+#Central: no sig
+#Transition: 3-5 p = 0.0012, 3-6 p - 0.0242, 3-7 p = -.0013, 3-8 p = 00002, 3-9 p = 0.0113, 4-5 p = 0.0958, 4-7 p = 0.0293, 4-8 p = 0.0023, 4-9 p = 0.0830
+#Upland: 3-7 p = 0.0933, 3-5 p = 0.0111, 3-6 p = 0.0285, 3-7 p = 0.0015, 3-8 p = 0.0225, 3-9 p = 0.0204, 4-5 p = 0.0406, 4-6 p = 0.0482, 4-7 p = 0.0024, 4-8 p = 0.0467, 4-9 p = 0.0357
+exotic_pc_continuous_lmer <- np_annual_total_exotic %>% 
+  filter(Replicate_Zone == "U") %>% 
+  lmer(log(max_annual_exotic_pc) ~ (Time_Since) + (1|Year) + (1|plot_replicate), data = .)
+#summary(exotic_pc_continuous_lmer)
+#transition, upland sig
+#### Check diagnostic graphs
+#E1 <- resid(exotic_pc_continuous_lmer)
+#F1 <- fitted(exotic_pc_continuous_lmer)
+#plot(x=F1, y=E1, xlab="Fitted Model Values", ylab="Pearson Residuals", main="Variance") #run 2 lines together -- assessing homoskedasticity -- you want to see no pattern
+#abline(h=0)
+#qqnorm(E1, ylab="Pearson Residuals")
+#qqline(E1) #run 2 lines together -- assess if model residuals are normally distributed
+#qqnorm(ranef(exotic_pc_continuous_lmer)$plot_replicate[,1], main = "Quadrat Residuals")
+#qqline(ranef(exotic_pc_continuous_lmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_pc_continuous_lmer)$Year[,1], main = "Monitoring Year Residuals")
+#qqline(ranef(exotic_pc_continuous_lmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
+
+
+#### GLMER for exotic % cover
+exotic_pc_glmer <- glmer.nb((max_annual_exotic_pc) ~ as.factor(Time_Since) + Replicate_Zone + as.factor(Time_Since):Replicate_Zone + (1|Year) + (1|depth) + (1|size) + (1|plot_replicate), np_annual_total_exotic)
+#summary(exotic_pc_glmer)
+#time, transition, upland sig
+#### Check diagnostic graphs
+#E1 <- resid(exotic_pc_glmer)
+#F1 <- fitted(exotic_pc_glmer)
+#plot(x=F1, y=E1, xlab="Fitted Model Values", ylab="Pearson Residuals", main="Variance") #run 2 lines together -- assessing homoskedasticity -- you want to see no pattern
+#abline(h=0)
+#qqnorm(E1, ylab="Pearson Residuals")
+#qqline(E1) #run 2 lines together -- assess if model residuals are normally distributed
+#qqnorm(ranef(exotic_pc_glmer)$plot_replicate[,1], main = "Quadrat Residuals")
+#qqline(ranef(exotic_pc_glmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_pc_glmer)$Year[,1], main = "Monitoring Year Residuals")
+#qqline(ranef(exotic_pc_glmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_pc_glmer)$depth[,1], main = "depth Residuals")
+#qqline(ranef(exotic_pc_glmer)$depth[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_pc_glmer)$size[,1], main = "size Residuals")
+#qqline(ranef(exotic_pc_glmer)$size[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#Checking for overdispersion -- how well your chosen link distribution matches your data
+#E1<-resid(exotic_pc_glmer, type = "pearson")
+#N <- length(E1)
+#p <- length(coef(exotic_pc_glmer))
+#D <- sum(E1^2) / (N - p)
+#D = 0.674 -- want this to be 1.0-1.1; above 1.2 is not great; above 1.3 is really not good (overdispersed = easier to accept false sig differences); if underdispersed (<1) then there's less error than the distribution can handle (harder to detect sig diff)
+#### ANOVA of glmer
+exotic_pc_glmer_anova <- anova(exotic_pc_glmer)
+#### Tukey's post-hoc of least-squares means
+exotic_pc_glmer_tukey <- emmeans(exotic_pc_glmer, pairwise ~ as.factor(Time_Since) | Replicate_Zone, adjust = "tukey")
+#plot(exotic_pc_lmer_tukey)
+
+
+
+
+
+
+### Check annual total biomass for normality
+biomass_hist <- ggplot(annual_exotic_biomass, aes(x = annual_biomass)) +
+  geom_histogram()
+#not normal -- skewed right
+biomass_qq <- ggplot(annual_exotic_biomass, aes(sample = annual_biomass)) +
+  geom_qq()
+#not normal -- skewed right
+
+## Boxplot of total annual exotic biomass, by zone, by time since
+exotic_biomass_time_box <- annual_exotic_biomass %>% 
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "Central",  Replicate_Zone == "T" ~ "Transition", Replicate_Zone == "U" ~ "Upland")) %>%
+  ggplot(aes(x = as.factor(Time_Since), y = annual_biomass)) +
+  geom_boxplot(fill = "coral3") +
+  geom_jitter(width = .2, alpha = .4) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Total Biomass of Exotics, over time", x = "Age of Pool (years)", y = "Biomass (g)", caption = "Sig increase around 4 in transition and upland \n (Sig increase in transition and upland over time)") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 100))
+exotic_biomass_time_box
+
+### LMER (log+1 transformed)
+exotic_biomass_lmer <- lmer(log(annual_biomass+1) ~ as.factor(Time_Since) + Replicate_Zone + as.factor(Time_Since):Replicate_Zone + (1|Year) + (1|plot_replicate), annual_exotic_biomass)
+#summary(exotic_biomass_lmer)
+#some age, age:upland and age:transition sig
+#### Check diagnostic graphs
+#E1 <- resid(exotic_biomass_lmer)
+#F1 <- fitted(exotic_biomass_lmer)
+#plot(x=F1, y=E1, xlab="Fitted Model Values", ylab="Pearson Residuals", main="Variance") #run 2 lines together -- assessing homoskedasticity -- you want to see no pattern
+#abline(h=0)
+#qqnorm(E1, ylab="Pearson Residuals")
+#qqline(E1) #run 2 lines together -- assess if model residuals are normally distributed
+#qqnorm(ranef(exotic_biomass_lmer)$plot_replicate[,1], main = "Quadrat Residuals")
+#qqline(ranef(exotic_biomass_lmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_biomass_lmer)$Year[,1], main = "Monitoring Year Residuals")
+#qqline(ranef(exotic_biomass_lmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#### ANOVA of lmer
+exotic_biomass_lmer_anova <- anova(exotic_biomass_lmer)
+#### Tukey's post-hoc of least-squares means
+exotic_biomass_lmer_tukey <- emmeans(exotic_biomass_lmer, pairwise ~ as.factor(Time_Since) | Replicate_Zone, adjust = "tukey")
+#plot(exotic_biomass_lmer_tukey, comparisons = TRUE)
+#Central: no sig
+#Transition: 2-7 p = 0.0675, 2-8 p = 0.0891, 2-9 p = 0.0784, 3-6 p = 0.767, 3-7 p = 0.0012, 3-8 p = 0.0102, 3-9 p = 0.0107, 4-7 p = 0.0474
+#Upland: 3-5 p = 0.0763, 3-6 p = 0.0503, 3-7 p = 0.0101, 3-8 p = 0.1715, 3-8 p = 0.0984
+exotic_biomass_continuous_lmer <- annual_exotic_biomass %>% 
+  filter(Replicate_Zone == "U") %>% 
+  lmer(log(annual_biomass+1) ~ (Time_Since) + (1|Year) + (1|plot_replicate), data = .)
+#summary(exotic_biomass_continuous_lmer)
+#upland and transition sig
+#### Check diagnostic graphs
+#E1 <- resid(exotic_biomass_continuous_lmer)
+#F1 <- fitted(exotic_biomass_continuous_lmer)
+#plot(x=F1, y=E1, xlab="Fitted Model Values", ylab="Pearson Residuals", main="Variance") #run 2 lines together -- assessing homoskedasticity -- you want to see no pattern
+#abline(h=0)
+#qqnorm(E1, ylab="Pearson Residuals")
+#qqline(E1) #run 2 lines together -- assess if model residuals are normally distributed
+#qqnorm(ranef(exotic_biomass_continuous_lmer)$plot_replicate[,1], main = "Quadrat Residuals")
+#qqline(ranef(exotic_biomass_continuous_lmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_biomass_continuous_lmer)$Year[,1], main = "Monitoring Year Residuals")
+#qqline(ranef(exotic_biomass_continuous_lmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
+
+
+#### GLMER for exotic biomass
+exotic_biomass_glmer <- full_join(annual_exotic_biomass, hydro) %>% glmer((annual_biomass+1) ~ as.factor(Time_Since) + Replicate_Zone + as.factor(Time_Since):Replicate_Zone + (1|Year) + (1|depth) + (1|size) + (1|plot_replicate), family = Gamma(link = "log"), data = .)
+#summary(exotic_biomass_glmer)
+#time, transition, upland sig
+#### Check diagnostic graphs
+#E1 <- resid(exotic_biomass_glmer)
+#F1 <- fitted(exotic_biomass_glmer)
+#plot(x=F1, y=E1, xlab="Fitted Model Values", ylab="Pearson Residuals", main="Variance") #run 2 lines together -- assessing homoskedasticity -- you want to see no pattern
+#abline(h=0)
+#qqnorm(E1, ylab="Pearson Residuals")
+#qqline(E1) #run 2 lines together -- assess if model residuals are normally distributed
+#qqnorm(ranef(exotic_biomass_glmer)$plot_replicate[,1], main = "Quadrat Residuals")
+#qqline(ranef(exotic_biomass_glmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_biomass_glmer)$Year[,1], main = "Monitoring Year Residuals")
+#qqline(ranef(exotic_biomass_glmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_biomass_glmer)$depth[,1], main = "depth Residuals")
+#qqline(ranef(exotic_biomass_glmer)$depth[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_biomass_glmer)$size[,1], main = "Msize Residuals")
+#qqline(ranef(exotic_biomass_glmer)$size[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#### ANOVA of glmer
+exotic_biomass_glmer_anova <- anova(exotic_biomass_glmer)
+#### Tukey's post-hoc of least-squares means
+exotic_biomass_glmer_tukey <- emmeans(exotic_biomass_glmer, pairwise ~ as.factor(Time_Since) | Replicate_Zone, adjust = "tukey")
+#plot(exotic_pc_lmer_tukey)
+
+
+
+
+
+
+
+
+
+## Shannon's Index for exotic community of each plot per year
+exotic_h <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  filter(Native_Status == "E") %>% 
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "1", Replicate_Zone == "T" ~ "2", Replicate_Zone == "U" ~ "3")) %>% 
+  group_by(date, month_number, Year, Plot, Replicate, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0))) %>% 
+  column_to_rownames("replicate_date") %>% 
+  select(8:71) %>% 
+  diversity() %>% 
+  as.data.frame() %>% 
+  rownames_to_column("replicate_date") %>%
+  rename("h" = ".")
+
+## Max H' for each quadrat per zone per year, add time since column
+max_annual_exotic_h <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  filter(Native_Status == "E") %>% 
+  group_by(date, month_number, Year, Plot, Replicate, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0))) %>% 
+  select(1:8) %>% 
+  full_join(exotic_h) %>% 
+  group_by(Year, Plot, Replicate, Replicate_Zone) %>% 
+  mutate(max_exotic_h = max(h)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  mutate(plot_replicate = paste(Plot, Replicate, sep = "-"))
+
+### Exploratory graphs
+exotic_h_hist <- max_annual_exotic_h %>% 
+  ggplot(aes(x = max_exotic_h)) +
+  geom_histogram()
+#kind of normal...
+exotic_h_qq <- max_annual_exotic_h %>% 
+  ggplot(aes(sample = max_exotic_h)) +
+  geom_qq()
+#kind of normal...
+
+
+
+
+### Column graph of H', by zone, by time since
+exotic_h_col <- max_annual_exotic_h %>% 
+  group_by(Time_Since, Replicate_Zone) %>% 
+  summarize(mean = mean(max_exotic_h),
+            se = std.error(max_exotic_h)) %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = mean)) +
+  geom_col(fill = "coral3") +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se, width = .2)) +
+  labs(title = "Exotic Species Diversity, over time", x = "Time Since Restoration (years)", y = "Shannon's Index of Diversity", caption = "(Upland: ANOVA F(7) = 16.68, p << 0.001; \n Tukey's sig 2-4+, sig 3-4+, 5-7, 5-9, 6-7 \n Central ANOVA F(7) = 5.264, p << 0.001; \n Tukey's sig 2-8, 3-8, 4-8, 5-8, 6-8, 7-8)") +
+  facet_wrap(~Replicate_Zone) +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0)) +
+  theme(text = element_text(size=20))
+exotic_h_col
+
+###ANOVA of H', for upland zone
+exotic_h_u_aov <- max_annual_exotic_h %>% 
+  filter(Replicate_Zone == "U") %>% 
+  aov(max_exotic_h ~ as.factor(Time_Since), data = .)
+#summary(exotic_h_u_aov)
+#F(7) = 16.68, p << 0.001
+####Tukey's Post-hoc
+exotic_h_u_tukey <- TukeyHSD(exotic_h_u_aov)
+#sig 2-4+, sig 3-4+, 5-7, 5-9, 6-7
+###ANOVA of H', for transition zone
+exotic_h_t_aov <- max_annual_exotic_h %>% 
+  filter(Replicate_Zone == "T") %>% 
+  aov(max_exotic_h ~ as.factor(Time_Since), data = .)
+#summary(exotic_h_t_aov)
+#F(7) = 3.496, p = 0.00138
+####Tukey's Post-hoc
+exotic_h_t_tukey <- TukeyHSD(exotic_h_t_aov)
+#no sig
+###ANOVA of H', for central zone
+exotic_h_c_aov <- max_annual_exotic_h %>% 
+  filter(Replicate_Zone == "C") %>% 
+  aov(max_exotic_h ~ as.factor(Time_Since), data = .)
+#summary(exotic_h_c_aov)
+#F(7) = 5.264, p << 0.001
+####Tukey's Post-hoc
+exotic_h_c_tukey <- TukeyHSD(exotic_h_c_aov)
+#sig 2-8, 3-8, 4-8, 5-8, 6-8, 7-8
+
+
+## Boxplots exotic H', by zone, by time since
+exotic_h_box <- max_annual_exotic_h %>% 
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "Central",  Replicate_Zone == "T" ~ "Transition", Replicate_Zone == "U" ~ "Upland")) %>%
+  ggplot(aes(x = as.factor(Time_Since), y = max_exotic_h)) +
+  geom_boxplot(fill = "coral3") +
+  geom_jitter(width = .2, alpha = .4) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Exotic Species Diversity, over time", x = "Age of Pool (years)", y = "Shannon's Index", caption = "Sig increase at 7 in central \n Increase in transition around 6 \n Increase in upland at 4 and 7 and 9 \n (Sig increase in central and upland over time)") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 2))
+exotic_h_box
+
+###LMER
+exotic_h_lmer <- lmer(max_exotic_h ~ as.factor(Time_Since) + Replicate_Zone + as.factor(Time_Since):Replicate_Zone + (1|Year) + (1|plot_replicate), max_annual_exotic_h)
+#summary(exotic_h_lmer)
+#some age, age:upland and age:transition sig
+#### Check diagnostic graphs
+#E1 <- resid(exotic_h_lmer)
+#F1 <- fitted(exotic_h_lmer)
+#plot(x=F1, y=E1, xlab="Fitted Model Values", ylab="Pearson Residuals", main="Variance") #run 2 lines together -- assessing homoskedasticity -- you want to see no pattern
+#abline(h=0)
+#qqnorm(E1, ylab="Pearson Residuals")
+#qqline(E1) #run 2 lines together -- assess if model residuals are normally distributed
+#qqnorm(ranef(exotic_h_lmer)$plot_replicate[,1], main = "Quadrat Residuals")
+#qqline(ranef(exotic_h_lmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_h_lmer)$Year[,1], main = "Monitoring Year Residuals")
+#qqline(ranef(exotic_h_lmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#### ANOVA of lmer
+exotic_h_lmer_anova <- anova(exotic_h_lmer)
+#### Tukey's post-hoc of least-squares means
+exotic_h_lmer_tukey <- emmeans(exotic_h_lmer, pairwise ~ as.factor(Time_Since) | Replicate_Zone, adjust = "tukey")
+#plot(exotic_h_lmer_tukey)
+#Central: 6-7 p = 0.0592
+#Transition: 2-3 p = 0.0047, 3-4 p = 0.0085, 3-6 p = 0.01039, 3-7 p = 0.0454, 5-6 p = 0.0371, 5-7 p = 0.0059
+#Upland: 2-7 p = 0.0038, 2-8 p = 0.1972, 2-9 p = 0.0085, 2-9 p << 0.001, 3-4 p << 0.001, 3-5 p - 0.0128, 3-7 p << 0.001, 3-8 p = 0.0044, 3-9 p = 0.001, 4-7 p = 0.014, 4-9 p = 0.0074, 5-7 p << 0.001, 5-8 p = 0.0613, 5-9 p << 0.001, 6-7 p << 0.001, 6-8 p = 0.0010, 6-9 p << 0.001, 8-9 p = 0.0430
+exotic_h_continuous_lmer <- max_annual_exotic_h %>% 
+  filter(Replicate_Zone == "U") %>% 
+  lmer((max_exotic_h) ~ (Time_Since) + (1|Year) + (1|plot_replicate), data = .)
+#summary(exotic_h_continuous_lmer)
+#central and upland sig
+#### Check diagnostic graphs
+#E1 <- resid(exotic_h_continuous_lmer)
+#F1 <- fitted(exotic_h_continuous_lmer)
+#plot(x=F1, y=E1, xlab="Fitted Model Values", ylab="Pearson Residuals", main="Variance") #run 2 lines together -- assessing homoskedasticity -- you want to see no pattern
+#abline(h=0)
+#qqnorm(E1, ylab="Pearson Residuals")
+#qqline(E1) #run 2 lines together -- assess if model residuals are normally distributed
+#qqnorm(ranef(exotic_h_continuous_lmer)$plot_replicate[,1], main = "Quadrat Residuals")
+#qqline(ranef(exotic_h_continuous_lmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_h_continuous_lmer)$Year[,1], main = "Monitoring Year Residuals")
+#qqline(ranef(exotic_h_continuous_lmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
+
+```
+
+## 1b. Do pools converge on the same community composition over time?
+
+Hypothesis: Pools that are restored in the same way will converge on the same community over time.
+
+Results: Some plots are sig different throughout (PH1, RT); Pools aged 2-6 are the same; pools aged 7-9 are the same
+
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+# 1b. Do pools converge on the same community composition over time? (NMDS, cluster)
+
+## Community matrix
+np_community_matrix <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "1", Replicate_Zone == "T" ~ "2", Replicate_Zone == "U" ~ "3")) %>% 
+  mutate(Plot = case_when(Plot == "PH1" ~ "1", Plot == "TP" ~ "7", Plot == "RT" ~ "4", Plot == "MS" ~ "9", Plot == "WT1" ~ "14", Plot == "WT2" ~ "16", Plot == "CS" ~"19")) %>% 
+  group_by(date, month_number, Year, Plot, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate_Zone, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0))) %>% 
+  column_to_rownames("replicate_date") %>% 
+  select(7:141)
+
+## NMDS, by plot
+np_nmds <- metaMDS(np_community_matrix, trymax = 100, maxit = 999)
+#stressplot(np_nmds)
+#Generally, an average stress of > 0.2 is an indication that the ordination didn’t do a good job of representing community structure. However, NMDS stress increases as sample size increases, so if you have many samples (as this dataset does) your ordination will likely exhibit a lot of stress
+#stress = .1843
+
+np_nmds_scores <- scores(np_nmds, display = "sites") %>% 
+  as.data.frame() %>% 
+  rownames_to_column("replicate_date") %>% 
+  full_join(np_community_matrix_variables)
+
+np_nmds_fit <- envfit(np_nmds, np_community_matrix, perm = 999) #envfit() takes the output of metaMDS() and the species matrix you created
+
+np_nmds_fit_pvals <- np_nmds_fit$vectors$pvals %>% 
+  as.data.frame() %>% 
+  rownames_to_column("species") %>% 
+  dplyr::rename("pvals" = ".") #extract p-values for each species
+
+np_nmds_fit_coords <- np_nmds_fit %>% 
+  scores(., display = "vectors") %>% 
+  as.data.frame() %>% 
+  rownames_to_column("species") %>% 
+  full_join(., np_nmds_fit_pvals, by = "species") %>% 
+  filter(pvals <= 0.001) #extract coordinates for species, only keep species with p-val <= 0.0001
+
+### NMDS biplot, by plot
+np_nmds_plot_species_biplot <- np_nmds_scores %>% 
+  ggplot(aes(x = NMDS1, y = NMDS2)) +
+  coord_fixed() +
+  geom_point(aes(color = Plot)) +
+  stat_ellipse(aes(color = Plot)) +
+  geom_segment(data = np_nmds_fit_coords, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(0.25, "cm")),
+               col = "black") +
+  geom_text(data = np_nmds_fit_coords, aes(label = species)) +
+  theme_classic() +
+  labs(title = "NMDS, by plot", caption = "PH1 has different community (post-hoc pairwise perMANOVA p = 0.021) \n RT also has slightly different community (post-hoc pairwise perMANOVA p = 0.021)")
+np_nmds_plot_species_biplot
+
+####perMANOVA, by plot
+np_plot_permanova <- adonis(np_community_matrix ~ Plot, data = np_community_matrix_variables)
+#F(6) = 7.6089, p = 0.001
+####Post-hoc test
+np_plot_pairwise <- pairwise.adonis(np_community_matrix, np_community_matrix_variables$Plot)
+#PH1-RT p = .021, PH1-TP p = .021, PH1-MS p = .021, PH1-WT1 p = .021, PH1-WT2 p = .021, PH1-CS p = .021, RT-MS p = .021, RT-WT2 p = .021, RT-CS p = .021, TP-WT2 p = .063
+#only non-sig are RT-TP, TP-MS, TP-WT1, TP-CS, MS-WT1, WT1-WT2, WT1-CS
+
+
+### NMDS, by age, with species biplot
+np_nmds_age_species_biplot <- ggplot(np_nmds_scores, aes(x = NMDS1, y = NMDS2)) +
+  coord_fixed() +
+  geom_point(aes(color = as.factor(age))) +
+  stat_ellipse(aes(color = as.factor(age))) +
+  geom_segment(data = np_nmds_fit_coords, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(0.25, "cm")),
+               col = "black") +
+  geom_text(data = np_nmds_fit_coords, aes(label = species), alpha = .75) +
+  theme_classic() +
+  labs(title = "NMDS, by pool age", caption = "Sig difference in community across age (perMANOVA p = 0.001) -- community changes at year 6")
+np_nmds_age_species_biplot
+
+####perMANOVA, by age
+np_age_permanova <- adonis(np_community_matrix ~ age, data = np_community_matrix_variables)
+#F(6) = 15.499, p = 0.001
+####Post-hoc test
+np_age_pairwise <- pairwise.adonis(np_community_matrix, np_community_matrix_variables$age)
+#7-6 p = .028, 2-6 p = .028, 7-5 p = .028, 7-4 p = .056, 7-3 p = .028, 7-2 p = .028, 8-6 p = .028, 8-5 p = .028, 8-4 p = .028, 8-3 p = .028, 8-2 p = .028, 9-2 p = .028, 9-3 p = .028, 9-4 p = .056, 9-5 p = .028, 9-6 p = .028
+
+
+### NMDS
+np_nmds_zone <- ggplot(np_nmds_scores, aes(x = NMDS1, y = NMDS2)) +
+  coord_fixed() +
+  geom_point(aes(color = Replicate_Zone)) +
+  stat_ellipse(aes(color = Replicate_Zone)) +
+  theme_classic() +
+  labs(title = "NMDS, by zone", caption = "Central zone is sig different from  transition and upland zones (perMANOVA p = 0.067)") +
+  scale_color_manual(values = c("dodgerblue4", "darkolivegreen3", "goldenrod"), label = c("Central", "Transition", "Upland"), name = "Zone")
+np_nmds_zone
+
+####perMANOVA, by zone
+np_zone_permanova <- adonis(np_community_matrix ~ Replicate_Zone, data = np_community_matrix_variables)
+#F(2) = 1.6991, p = 0.062
+####Post-hoc test
+np_zone_pairwise <- pairwise.adonis(np_community_matrix, np_community_matrix_variables$Replicate_Zone)
+#C-T p = 0.123, C-U p = 0.096, T-U p = 1.000
+
+####Partition-based cluster analysis plot, for zone
+np_kmeans <- kmeans(np_nmds_scores[2:3], 3)
+
+np_clusters <- data.frame(np_nmds_scores, cluster_no = factor(np_kmeans$cluster))
+
+np_clusters_plot <- ggplot(np_clusters) +
+  geom_point(aes(x = NMDS1, y = NMDS2, color = cluster_no, pch = Replicate_Zone)) +
+  stat_ellipse(aes(x = NMDS1, y = NMDS2, color = Replicate_Zone))
+  labs(title = "Partition-based cluster analysis, by zone")
+np_clusters_plot
+
+```
+
+## 1c. How does the increase in exotics affect the community?
+
+Hypothesis: Exotic annual grass species will consistently dominate the community and outcompete native species.
+
+Results:
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+# 1c. How does the increase in exotics affect the community? (column graphs, NMDS)
+
+## Calculate total native % cover per quadrat, find max total native % cover per quadrat per year, add time since restoration column
+np_annual_total_native <- np_percent_cover %>%
+  filter(Native_Status == "N") %>% 
+  filter(Year > 2016) %>% 
+  group_by(date, Year, Month, Plot, Replicate, Replicate_Zone) %>% 
+  summarize(total_native_pc = sum(percent_cover)) %>% 
+  drop_na() %>% 
+  group_by(Year, Plot, Replicate, Replicate_Zone) %>% 
+  summarize(max_annual_native_pc = max(total_native_pc)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  mutate(plot_replicate = paste(Plot, Replicate, sep = "-"))
+
+### Check for normality
+native_pc_hist <- ggplot(np_annual_total_native, aes(x = max_annual_native_pc)) +
+  geom_histogram()
+#pretty normal
+native_pc_qq <- ggplot(np_annual_total_native, aes(sample = max_annual_native_pc)) +
+  geom_qq()
+#pretty normal
+
+
+## Column graph for native cover, by zone, by time since
+native_pc_col <- np_annual_total_native %>% 
+  group_by(Replicate_Zone, Time_Since) %>% 
+  summarize(mean = mean(max_annual_native_pc),
+            se = std.error(max_annual_native_pc)) %>% 
+  ggplot(aes(x = as.factor(Time_Since))) +
+  geom_col(aes(y = mean), fill = "darkgreen") +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se, width = .2)) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Total Native  Percent Cover, over time", x = "Age of Pool (years)", y = "Percent Cover (%)", caption = "Increase in native cover at year 3 in central and upland zones \n (Sig increase in central over time)") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 170))
+native_pc_col
+
+
+#### ANOVA of native cover
+native_pc_anova <- aov(max_annual_native_pc ~ as.factor(Time_Since) + Replicate_Zone + as.factor(Time_Since):Replicate_Zone + (1|Year) + (1|as.complex(plot_replicate)), data = np_annual_total_native)
+#summary(native_pc_anova)
+#age, zone sig
+#### Tukey's post-hoc
+native_pc_tukey <- emmeans(native_pc_anova, pairwise ~ as.factor(Time_Since) | Replicate_Zone, adjust = "tukey")
+#plot(native_pc_tukey, comparisons = TRUE)
+#Central: 2-3 p = 0.0022, 2-4 p = 0.0001, 2-5 p << 0.001, 2-6 p = 0.0022, 2-7 p =.0013, 2-8 p = 0.0006, 2-9 p << 0.001
+#Transition: no sig
+#Upland: 2-4 p = 0.1440, 2-5 p = 0.0419, 2-6 p = 0.1973, 2-8 p = 0.1732, 2-9 p = 0.0094
+#### LMER of native cover (continuous)
+native_pc_continuous_lmer <- np_annual_total_native %>% 
+  filter(Replicate_Zone == "C") %>% 
+  lmer((max_annual_native_pc) ~ (Time_Since) + (1|Year) + (1|plot_replicate), data = .)
+#summary(native_pc_continuous_lmer)
+#only central sig
+#### Check diagnostic graphs
+#E1 <- resid(native_pc_continuous_lmer)
+#F1 <- fitted(native_pc_continuous_lmer)
+#plot(x=F1, y=E1, xlab="Fitted Model Values", ylab="Pearson Residuals", main="Variance") #run 2 lines together -- assessing homoskedasticity -- you want to see no pattern
+#abline(h=0)
+#qqnorm(E1, ylab="Pearson Residuals")
+#qqline(E1) #run 2 lines together -- assess if model residuals are normally distributed
+#qqnorm(ranef(native_pc_continuous_lmer)$plot_replicate[,1], main = "Pool Residuals")
+#qqline(ranef(native_pc_continuous_lmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(native_pc_continuous_lmer)$Year[,1], main = "Monitoring Year Residuals")
+#qqline(ranef(native_pc_continuous_lmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
+
+
+
+
+## Shannon's Index for native community of each plot per year
+native_h <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  filter(Native_Status == "N") %>% 
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "1", Replicate_Zone == "T" ~ "2", Replicate_Zone == "U" ~ "3")) %>% 
+  group_by(date, month_number, Year, Plot, Replicate, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0))) %>% 
+  column_to_rownames("replicate_date") %>% 
+  select(8:69) %>% 
+  diversity() %>% 
+  as.data.frame() %>% 
+  rownames_to_column("replicate_date") %>%
+  rename("h" = ".")
+
+## Max H' for each quadrat per zone per year, add time since column
+max_annual_native_h <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  filter(Native_Status == "N") %>% 
+  group_by(date, month_number, Year, Plot, Replicate, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0))) %>% 
+  select(1:8) %>% 
+  full_join(native_h) %>% 
+  group_by(Year, Plot, Replicate, Replicate_Zone) %>% 
+  mutate(max_native_h = max(h)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = Year - Creation_Year) %>% 
+  mutate(plot_replicate = paste(Plot, Replicate, sep = "-"))
+
+### Exploratory graphs
+native_h_hist <- max_annual_native_h %>% 
+  ggplot(aes(x = max_native_h)) +
+  geom_histogram()
+#not normal
+native_h_qq <- max_annual_native_h %>% 
+  ggplot(aes(sample = max_native_h)) +
+  geom_qq()
+#not normal
+
+## Boxplot  for native H', by zone, by time since
+native_h_time_box <- max_annual_native_h %>% 
+  ggplot(aes(x = as.factor(Time_Since), y = max_native_h)) +
+  geom_boxplot(fill = "darkgreen") +
+  geom_jitter(width = .2, alpha = .4) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Native Shannon's Index, over time", x = "Age of Pool (years)", y = "Shannon's Index", caption = "Decrease in 3 in central and upland, \n increase around 4, 7, 9 in central and upland \n increase 4, 9 in transition \n (Sig increase in central and upland over time)") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 3))
+native_h_time_box
+
+### LMER for native H'
+native_h_lmer <- lmer((max_native_h) ~ as.factor(Time_Since) + Replicate_Zone + as.factor(Time_Since):Replicate_Zone + (1|Year) + (1|plot_replicate), max_annual_native_h)
+#summary(native_h_lmer)
+#some age, zone, age:zone sig
+#### Check diagnostic graphs
+#E1 <- resid(native_h_lmer)
+#F1 <- fitted(native_h_lmer)
+#plot(x=F1, y=E1, xlab="Fitted Model Values", ylab="Pearson Residuals", main="Variance for Native H'") #run 2 lines together -- assessing homoskedasticity -- you want to see no pattern
+#abline(h=0)
+#qqnorm(E1, ylab="Pearson Residuals")
+#qqline(E1) #run 2 lines together -- assess if model residuals are normally distributed
+#qqnorm(ranef(native_h_lmer)$plot_replicate[,1], main = "Pool Residuals")
+#qqline(ranef(native_h_lmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(native_h_lmer)$Year[,1], main = "Monitoring Year Residuals")
+#qqline(ranef(native_h_lmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#### ANOVA of lmer
+native_h_lmer_anova <- anova(native_h_lmer)
+#### Tukey's post-hoc of least-squares means
+native_h_lmer_lmer_tukey <- emmeans(native_h_lmer, pairwise ~ as.factor(Time_Since) | Replicate_Zone, adjust = "tukey")
+#plot(native_h_lmer_lmer_tukey)
+#Central: 2-3 p = 0.0006, 2-4 p = 0.0605, 2-9 p = 0.0642, 3-6 p << 0.001, 3-6 p = 0.0977, 3-7 p = 0.022, 3-8 p = 0.0003, 3-9 p = 0.0002, 4-5 p << 0.001, 4-7 p = 0.0016, 4-8 p = 0.0001, 4-9 p = 0.0001, 5-8 p = 0.0132, 5-9 p = 0.0012, 6-7 p = 0.0061, 6-8 p << 0.001, 6-9 p << 0.001, 7-8 p = 0.0377, 7-9 p = 0.0003
+#Transition: 4-7 p = 0.0753, 5-7 p = 0.0455, 7-8 p = 0.0056, 8-9 p = 0.0097
+#Upland: 2-3 p = 0.0569, 2-4 p = 0.0497, 2-7 p = 0.0255, 3-8 p = 0.1933, 3-9 p = 0.1414, 3-4 p << 0.001, 3-5 p = 0.002, 3-6 p = 0.0479, 3-7 p = 0.0004, 3-8 p = 0.0072, 3-9 p = 0.0110, 4-7 p = 0.0705, 5-7 p = 0.0001, 5-8 p = 0.1666, 5-9 p = 0.0876, 6-7 p << 0.001, 6-8 p = 0.0216, 6-9 p = 0.0127
+native_h_continuous_lmer <- max_annual_native_h %>% 
+  filter(Replicate_Zone == "T") %>% 
+  lmer((max_native_h) ~ (Time_Since) + (1|Year) + (1|plot_replicate), data = .)
+#summary(native_h_continuous_lmer)
+#central, upland slightly sig
+#### Check diagnostic graphs
+#E1 <- resid(native_h_continuous_lmer)
+#F1 <- fitted(native_h_continuous_lmer)
+#plot(x=F1, y=E1, xlab="Fitted Model Values", ylab="Pearson Residuals", main="Variance for Native H'") #run 2 lines together -- assessing homoskedasticity -- you want to see no pattern
+#abline(h=0)
+#qqnorm(E1, ylab="Pearson Residuals")
+#qqline(E1) #run 2 lines together -- assess if model residuals are normally distributed
+#qqnorm(ranef(native_h_continuous_lmer)$plot_replicate[,1], main = "Pool Residuals")
+#qqline(ranef(native_h_continuous_lmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(native_h_continuous_lmer)$Year[,1], main = "Monitoring Year Residuals")
+#qqline(ranef(native_h_continuous_lmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
+
+
+
+
+
+
+
+## Dominant natives/nonnatives
+np_dominant <- np_percent_cover %>%
+  drop_na(percent_cover) %>% 
+  group_by(Species_Full_Name) %>% 
+  summarize(max_pc = max(percent_cover)) %>% 
+  full_join(metadata) %>% 
+  drop_na(max_pc) %>% 
+  filter(Native_Status != "NA") %>% 
+  filter(max_pc >=10)
+#dominant exotics: FEPE, FEMY, POMO, CETE, BRDI, GEDI, PLCO, POAN, SPSP, BRHO, CRSC, LYHY
+#dominant natives: ELMA, STPU, JUPH, JUME, HOBR, BOMA, CAPR, CYER, JUBU, ERVA, ALSA, JUPA, MALE, SIBE, CEPA, ELTR, EPCA, ELGL, SCPU, SYSU, DEFA, FRSA
+
+```

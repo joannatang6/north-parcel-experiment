@@ -56,18 +56,21 @@ np_community_matrix_variables <- read_csv("np_community_matrix_variables.csv")
 
 # 0. Tidy up data
 
-# 1. How does exotic community change over time?
-## 1a. How does total exotic percent cover change with time since restoration (and interannual climate variability?)? (boxplots)
-## 1b. Is there a threshold (# of years) after which exotic abundance increases? (linear model)
-## 1c. Do pools converge on the same exotic community composition over time? (NMDS)
+# 1. Is sustained weeding effort a successful long-term restoration strategy?
+## 1a. How does total exotic percent cover change with age of pool? (boxplots)
+## 1b. How does total exotic diversity change with age of pool? (boxplots)
+## 1c. Is there a threshold (# of years) after which exotic abundance increases? (linear model)
+## 1d. Do pools converge on the same exotic community composition over time? (NMDS, cluster)
+##1e. Is the whole community changing? (NMDS, cluster)
+##1f. Is the native community changing? (NMDS, cluster, column graphs)
 
 # 2. What environmental filters can be manipulated to decrease exotics?
-## 2a. How does the seedbank compare to the aboveground cover? (presence/absence data)
-## 2b. Does active management result in a different exotic community? (NMDS w/ old Del Sol data)
+## 2a. How does the seedbank compare to the aboveground cover? (presence/absence column graphs, NMDS, cluster)
+## 2b. Does active management result in a different exotic community? (NMDS w/ old Del Sol data, cluster)
 ## 2c. Do certain exotics and natives occupy the same (phenological) niche? (NMDS, or scatterplot b/t 2 species)
 
 # 3. What is the ideal monitoring plan?
-## 3a. Same as 1b -- is there a threshold after which exotics increase (i.e., what's the ideal duration of monitoring?)?
+## 3a. Same as 1c -- is there a threshold after which exotics increase (i.e., what's the ideal duration of monitoring?)?
 ## 3b. What is the ideal frequency/season of monitoring? (boxplots)
 
 
@@ -309,6 +312,38 @@ exotic_biomass_time_u_dunn <- max_exotic_biomass %>%
   filter(Replicate_Zone == "U") %>% 
   dunnTest(max ~ as.factor(Time_Since), data = .)
 #2-7 p = .0947, 3-7 p = .00103, 4-7 p = .0125, 3-9 p = .0148, 4-9 p = .0829
+
+## Calculate total exotic % cover per quadrat, find average total exotic % cover per zone per pool per month, add time since restoration column
+np_monthly_total_exotic <- np_percent_cover %>%
+  filter(Native_Status == "E") %>% 
+  group_by(date, Year, month_number, Plot, Replicate, Replicate_Zone) %>% 
+  summarize(total_exotic_pc = sum(percent_cover)) %>% 
+  drop_na() %>% 
+  group_by(date, month_number, Year, Plot, Replicate_Zone) %>% 
+  summarize(avg_monthly_exotic_pc = mean(total_exotic_pc)) %>% 
+  full_join(creation_year_df) %>% 
+  mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
+  mutate(Time_Since = (Year - Creation_Year) + ((month_number-1)/12))
+
+### Check for normality
+exotic_pc_hist <- ggplot(np_monthly_total_exotic, aes(x = avg_monthly_exotic_pc)) +
+  geom_histogram()
+#not normal -- skewed right
+exotic_pc_qq <- ggplot(np_monthly_total_exotic, aes(sample = avg_monthly_exotic_pc)) +
+  geom_qq()
+#not normal -- skewed right
+
+## Scatterplot of total exotic pc per zone, over time
+exotic_pc_time_scatter <- np_monthly_total_exotic %>% 
+  ggplot(aes(x = Time_Since, y = avg_monthly_exotic_pc)) +
+  geom_point() +
+  geom_smooth(method = "glm", se = TRUE, size = .5) +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Total Percent Cover of Exotics, over time", x = "Age of Pool (years)", y = "Percent Cover (%)", caption = "Increase in median after year 4 \n driven by sig increase in transition and upland zones (Kruskal-Wallis p << 0.001)") +
+  theme_classic() +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 100))
+exotic_pc_time_scatter
 
 
 
@@ -721,7 +756,8 @@ exotic_nmds_fit_coords <- exotic_nmds_fit %>%
   as.data.frame() %>% 
   rownames_to_column("species") %>% 
   full_join(., exotic_nmds_fit_pvals, by = "species") %>% 
-  filter(pvals == 0.001) #extract coordinates for species, only keep species with p-val = 0.001
+  filter(pvals <= 0.1) #extract coordinates for species, only keep species with p-val <= 0.1
+#POMO p = 0.089, ATSE p = 0.058, SATR p = 0.001, PSUAL p = 0.068, POAR p = 0.002
 
 
 ### NMDS for exotics, by plot, with species biplot
