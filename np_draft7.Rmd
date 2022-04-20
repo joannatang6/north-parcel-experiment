@@ -638,7 +638,7 @@ np_clusters_plot
 
 Hypothesis: Exotic annual grass species will consistently dominate the community and outcompete native species.
 
-Results:
+Results: Native cover remains high over time, suggesting coexistence
 
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
 # 1c. How does the increase in exotics affect the community? (column graphs, NMDS)
@@ -840,5 +840,183 @@ np_zone_richness <- np_percent_cover %>%
   summarize(richness = length(mean)) %>% 
   group_by(Replicate_Zone, Native_Status) %>% 
   summarize(mean_richness = mean(richness))
+
+
+
+
+
+## Bray-Curtis Dissimilarity Index
+
+### Bray-Curtis of all species
+np_bray <- as.matrix(vegdist(np_community_matrix, method = "bray"))
+#hist(np_bray, xlab = "ecological distance", main = "np_bray")
+
+### Exotic community matrix, central
+exotic_c_community_matrix <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  filter(Native_Status == "E") %>%
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "1", Replicate_Zone == "T" ~ "2", Replicate_Zone == "U" ~ "3")) %>% 
+  mutate(Plot = case_when(Plot == "PH1" ~ "1", Plot == "TP" ~ "7", Plot == "RT" ~ "4", Plot == "MS" ~ "9", Plot == "WT1" ~ "14", Plot == "WT2" ~ "16", Plot == "CS" ~"19")) %>% 
+  filter(Replicate_Zone == "1") %>% 
+  group_by(date, month_number, Year, Plot, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate_Zone, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0))) %>% 
+  column_to_rownames("replicate_date") %>% 
+  select(7:27)
+
+#### Bray-Curtis of exotics, central
+np_exotic_c_bray <- as.matrix(vegdist(exotic_c_community_matrix, method = "bray")) %>% 
+  as.data.frame() %>% 
+  pivot_longer(names_to = "quadrat_id", values_to = "bray_curtis", 1:59) %>%
+  add_column(replicate_zone = "Central") %>% 
+  add_column(native_status = "E")
+#hist(np_exotic_c_bray, xlab = "ecological distance", main = "np_exotic_c_bray")
+
+### Exotic community matrix, transition
+exotic_t_community_matrix <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  filter(Native_Status == "E") %>%
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "1", Replicate_Zone == "T" ~ "2", Replicate_Zone == "U" ~ "3")) %>% 
+  mutate(Plot = case_when(Plot == "PH1" ~ "1", Plot == "TP" ~ "7", Plot == "RT" ~ "4", Plot == "MS" ~ "9", Plot == "WT1" ~ "14", Plot == "WT2" ~ "16", Plot == "CS" ~"19")) %>% 
+  filter(Replicate_Zone == "2") %>% 
+  group_by(date, month_number, Year, Plot, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate_Zone, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0))) %>% 
+  column_to_rownames("replicate_date") %>% 
+  select(7:57)
+
+#### Bray-Curtis of exotics, transition
+np_exotic_t_bray <- as.matrix(vegdist(exotic_t_community_matrix, method = "bray")) %>% 
+  as.data.frame() %>% 
+  pivot_longer(names_to = "quadrat_id", values_to = "bray_curtis", 1:127) %>%
+  add_column(replicate_zone = "Transition") %>% 
+  add_column(native_status = "E")
+#hist(np_exotic_t_bray, xlab = "ecological distance", main = "np_exotic_t_bray")
+
+### Exotic community matrix, upland
+exotic_u_community_matrix <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  filter(Native_Status == "E") %>%
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "1", Replicate_Zone == "T" ~ "2", Replicate_Zone == "U" ~ "3")) %>% 
+  mutate(Plot = case_when(Plot == "PH1" ~ "1", Plot == "TP" ~ "7", Plot == "RT" ~ "4", Plot == "MS" ~ "9", Plot == "WT1" ~ "14", Plot == "WT2" ~ "16", Plot == "CS" ~"19")) %>% 
+  filter(Replicate_Zone == "3") %>% 
+  group_by(date, month_number, Year, Plot, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate_Zone, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0))) %>% 
+  column_to_rownames("replicate_date") %>% 
+  select(7:62)
+
+#### Bray-Curtis of exotics, upland
+np_exotic_u_bray <- as.matrix(vegdist(exotic_u_community_matrix, method = "bray")) %>% 
+  as.data.frame() %>% 
+  pivot_longer(names_to = "quadrat_id", values_to = "bray_curtis", 1:135) %>%
+  add_column(replicate_zone = "Upland") %>% 
+  add_column(native_status = "E")
+#hist(np_exotic_u_bray, xlab = "ecological distance", main = "np_exotic_u_bray")
+
+### Native community matrix, central
+native_c_community_matrix <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  filter(Native_Status == "N") %>% 
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "1", Replicate_Zone == "T" ~ "2", Replicate_Zone == "U" ~ "3")) %>% 
+  mutate(Plot = case_when(Plot == "PH1" ~ "1", Plot == "TP" ~ "7", Plot == "RT" ~ "4", Plot == "MS" ~ "9", Plot == "WT1" ~ "14", Plot == "WT2" ~ "16", Plot == "CS" ~"19")) %>% 
+  filter(Replicate_Zone == "1") %>% 
+  group_by(date, month_number, Year, Plot, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate_Zone, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  drop_na(Replicate_Zone) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0))) %>% 
+  column_to_rownames("replicate_date") %>% 
+  select(7:34)
+
+#### Bray-Curtis of natives, central
+np_native_c_bray <- as.matrix(vegdist(native_c_community_matrix, method = "bray")) %>% 
+  as.data.frame() %>% 
+  pivot_longer(names_to = "quadrat_id", values_to = "bray_curtis", 1:132) %>%
+  add_column(replicate_zone = "Central") %>% 
+  add_column(native_status = "N")
+#hist(np_native_c_bray, xlab = "ecological distance", main = "np_native_c_bray")
+
+### Native community matrix, transition
+native_t_community_matrix <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  filter(Native_Status == "N") %>% 
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "1", Replicate_Zone == "T" ~ "2", Replicate_Zone == "U" ~ "3")) %>% 
+  mutate(Plot = case_when(Plot == "PH1" ~ "1", Plot == "TP" ~ "7", Plot == "RT" ~ "4", Plot == "MS" ~ "9", Plot == "WT1" ~ "14", Plot == "WT2" ~ "16", Plot == "CS" ~"19")) %>% 
+  filter(Replicate_Zone == "2") %>% 
+  group_by(date, month_number, Year, Plot, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate_Zone, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  drop_na(Replicate_Zone) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0))) %>% 
+  column_to_rownames("replicate_date") %>% 
+  select(7:53)
+
+#### Bray-Curtis of natives, transition
+np_native_t_bray <- as.matrix(vegdist(native_t_community_matrix, method = "bray")) %>% 
+  as.data.frame() %>% 
+  pivot_longer(names_to = "quadrat_id", values_to = "bray_curtis", 1:182) %>%
+  add_column(replicate_zone = "Transition") %>% 
+  add_column(native_status = "N")
+#hist(np_native_t_bray, xlab = "ecological distance", main = "np_native_t_bray")
+
+### Native community matrix, upland
+native_u_community_matrix <- np_percent_cover %>% 
+  filter(Replicate_Zone != "NA") %>% 
+  filter(Native_Status == "N") %>% 
+  mutate(Replicate_Zone = case_when(Replicate_Zone == "C" ~ "1", Replicate_Zone == "T" ~ "2", Replicate_Zone == "U" ~ "3")) %>% 
+  mutate(Plot = case_when(Plot == "PH1" ~ "1", Plot == "TP" ~ "7", Plot == "RT" ~ "4", Plot == "MS" ~ "9", Plot == "WT1" ~ "14", Plot == "WT2" ~ "16", Plot == "CS" ~"19")) %>% 
+  filter(Replicate_Zone == "3") %>% 
+  group_by(date, month_number, Year, Plot, Replicate_Zone, Species) %>% 
+  summarize(mean_pc = mean(percent_cover)) %>% 
+  mutate(replicate_date = paste(Plot, Replicate_Zone, date, sep = "-")) %>% 
+  mutate(month_year = paste(Year, month_number, sep = ".")) %>% 
+  drop_na(Replicate_Zone) %>% 
+  pivot_wider(names_from = Species, values_from = mean_pc) %>% 
+  mutate_all(funs(replace_na(.,0))) %>% 
+  column_to_rownames("replicate_date") %>% 
+  select(7:44)
+
+#### Bray-Curtis of natives, upland
+np_native_u_bray <- as.matrix(vegdist(native_u_community_matrix, method = "bray")) %>% 
+  as.data.frame() %>% 
+  pivot_longer(names_to = "quadrat_id", values_to = "bray_curtis", 1:188) %>%
+  add_column(replicate_zone = "Upland") %>% 
+  add_column(native_status = "N")
+##hist(np_native_u_bray, xlab = "ecological distance", main = "np_native_u_bray")
+
+
+#### Dataframe of all Bray-Curtis
+bray_df <- rbind(np_exotic_c_bray, np_exotic_t_bray, np_exotic_u_bray, np_native_c_bray,  np_native_t_bray, np_native_u_bray) %>% 
+  mutate(status_zone = paste(native_status, replicate_zone, sep = "_"))
+
+### Boxplots of Bray-Curtis
+bray_box <- bray_df %>% 
+  ggplot() +
+  geom_boxplot(aes(x = replicate_zone, y = bray_curtis, fill = native_status)) +
+  labs(title = "Bray-Curtis Dissimilarity", x = "Vegetation Zone", y = "Bray-Curtis Distance", caption  = "Kruskal-Wallis p << 0.001") +
+  theme_classic() +
+  scale_fill_manual(values = c("coral3", "darkgreen"), label = c("Exotic", "Native"), name = "Native Status")
+bray_box
+
+##### Kruskal-Wallis
+bray_kw <- kruskal.test(bray_curtis ~ as.factor(status_zone), data = bray_df)
+#p << .001
+### Post-hoc Dunn's test
+bray_dunn <- dunnTest(bray_curtis ~ as.factor(status_zone), data = bray_df)
+#all sig diff
 
 ```
