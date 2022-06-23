@@ -37,6 +37,7 @@ library(rstatix)
 library(NbClust)
 library(betareg)
 library(glmmTMB)
+library(sjPlot)
 library(tidyverse)
 
 
@@ -234,9 +235,10 @@ exotic_pc_continuous_lmer <- np_annual_total_exotic %>%
 
 
 #### GLMER for exotic % cover
-exotic_pc_glmer <- glmer.nb((max_annual_exotic_pc) ~ as.factor(Time_Since) + Replicate_Zone + as.factor(Time_Since):Replicate_Zone + (1|Year) + (1|depth) + (1|size) + (1|plot_replicate), np_annual_total_exotic)
+exotic_pc_glmer <- glmer.nb((max_annual_exotic_pc) ~ as.factor(Time_Since) + Replicate_Zone + as.factor(Time_Since):Replicate_Zone + (1|Year) + (1|depth) + (1|size) + (1|plot_replicate), data = np_annual_total_exotic)
 #summary(exotic_pc_glmer)
 #time, transition, upland sig
+#tab_model(exotic_pc_glmer)
 #### Check diagnostic graphs
 #E1 <- resid(exotic_pc_glmer)
 #F1 <- fitted(exotic_pc_glmer)
@@ -260,9 +262,35 @@ exotic_pc_glmer <- glmer.nb((max_annual_exotic_pc) ~ as.factor(Time_Since) + Rep
 #D = 0.674 -- want this to be 1.0-1.1; above 1.2 is not great; above 1.3 is really not good (overdispersed = easier to accept false sig differences); if underdispersed (<1) then there's less error than the distribution can handle (harder to detect sig diff)
 #### ANOVA of glmer
 exotic_pc_glmer_anova <- anova(exotic_pc_glmer)
+#tab_model(exotic_pc_glmer)
 #### Tukey's post-hoc of least-squares means
 exotic_pc_glmer_tukey <- emmeans(exotic_pc_glmer, pairwise ~ as.factor(Time_Since) | Replicate_Zone, adjust = "tukey")
 #plot(exotic_pc_lmer_tukey)
+#### Continuous GLMER for exotic % cover
+exotic_pc_continuous_glmer <- glmer.nb((max_annual_exotic_pc) ~ (Time_Since) + Replicate_Zone + (Time_Since):Replicate_Zone + (1|Year) + (1|depth) + (1|size) + (1|plot_replicate), data = np_annual_total_exotic)
+#summary(exotic_pc_continuous_glmer)
+#time*transition, time*upland sig
+#### Check diagnostic graphs
+#E1 <- resid(exotic_pc_continuous_glmer)
+#F1 <- fitted(exotic_pc_continuous_glmer)
+#plot(x=F1, y=E1, xlab="Fitted Model Values", ylab="Pearson Residuals", main="Variance") #run 2 lines together -- assessing homoskedasticity -- you want to see no pattern
+#abline(h=0)
+#qqnorm(E1, ylab="Pearson Residuals")
+#qqline(E1) #run 2 lines together -- assess if model residuals are normally distributed
+#qqnorm(ranef(exotic_pc_continuous_glmer)$plot_replicate[,1], main = "Quadrat Residuals")
+#qqline(ranef(exotic_pc_continuous_glmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_pc_continuous_glmer)$Year[,1], main = "Monitoring Year Residuals")
+#qqline(ranef(exotic_pc_continuous_glmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_pc_continuous_glmer)$depth[,1], main = "depth Residuals")
+#qqline(ranef(exotic_pc_continuous_glmer)$depth[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_pc_continuous_glmer)$size[,1], main = "size Residuals")
+#qqline(ranef(exotic_pc_continuous_glmer)$size[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#Checking for overdispersion -- how well your chosen link distribution matches your data
+#E1<-resid(exotic_pc_continuous_glmer, type = "pearson")
+#N <- length(E1)
+#p <- length(coef(exotic_pc_continuous_glmer))
+#D <- sum(E1^2) / (N - p)
+#D = 0.783 -- want this to be 1.0-1.1; above 1.2 is not great; above 1.3 is really not good (overdispersed = easier to accept false sig differences); if underdispersed (<1) then there's less error than the distribution can handle (harder to detect sig diff)
 
 
 
@@ -331,9 +359,11 @@ exotic_biomass_continuous_lmer <- annual_exotic_biomass %>%
 
 
 #### GLMER for exotic biomass
-exotic_biomass_glmer <- full_join(annual_exotic_biomass, hydro) %>% glmer((annual_biomass+1) ~ as.factor(Time_Since) + Replicate_Zone + as.factor(Time_Since):Replicate_Zone + (1|Year) + (1|depth) + (1|size) + (1|plot_replicate), family = Gamma(link = "log"), data = .)
+exotic_biomass_glmer <- full_join(annual_exotic_biomass, hydro) %>%
+  glmer((annual_biomass+1) ~ as.factor(Time_Since) + Replicate_Zone + as.factor(Time_Since):Replicate_Zone + (1|Year) + (1|depth) + (1|size) + (1|plot_replicate), family = Gamma(link = "log"), data = .)
 #summary(exotic_biomass_glmer)
 #time, transition, upland sig
+#tab_model(exotic_biomass_glmer)
 #### Check diagnostic graphs
 #E1 <- resid(exotic_biomass_glmer)
 #F1 <- fitted(exotic_biomass_glmer)
@@ -354,6 +384,26 @@ exotic_biomass_glmer_anova <- anova(exotic_biomass_glmer)
 #### Tukey's post-hoc of least-squares means
 exotic_biomass_glmer_tukey <- emmeans(exotic_biomass_glmer, pairwise ~ as.factor(Time_Since) | Replicate_Zone, adjust = "tukey")
 #plot(exotic_pc_lmer_tukey)
+#### Continuous GLMER for exotic biomass
+exotic_biomass_continuous_glmer <- full_join(annual_exotic_biomass, hydro) %>%
+  glmer((annual_biomass+1) ~ (Time_Since) + Replicate_Zone + (Time_Since):Replicate_Zone + (1|Year) + (1|depth) + (1|size) + (1|plot_replicate), family = Gamma(link = "log"), data = .)
+#summary(exotic_biomass_continuous_glmer)
+#time, transition, upland all sig
+#### Check diagnostic graphs
+#E1 <- resid(exotic_biomass_continuous_glmer)
+#F1 <- fitted(exotic_biomass_continuous_glmer)
+#plot(x=F1, y=E1, xlab="Fitted Model Values", ylab="Pearson Residuals", main="Variance") #run 2 lines together -- assessing homoskedasticity -- you want to see no pattern
+#abline(h=0)
+#qqnorm(E1, ylab="Pearson Residuals")
+#qqline(E1) #run 2 lines together -- assess if model residuals are normally distributed
+#qqnorm(ranef(exotic_biomass_continuous_glmer)$plot_replicate[,1], main = "Quadrat Residuals")
+#qqline(ranef(exotic_biomass_continuous_glmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_biomass_continuous_glmer)$Year[,1], main = "Monitoring Year Residuals")
+#qqline(ranef(exotic_biomass_continuous_glmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_biomass_continuous_glmer)$depth[,1], main = "depth Residuals")
+#qqline(ranef(exotic_biomass_continuous_glmer)$depth[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(exotic_biomass_continuous_glmer)$size[,1], main = "Msize Residuals")
+#qqline(ranef(exotic_biomass_continuous_glmer)$size[,1]) #run 2 lines together -- assess if random effects residuals are normal
 
 
 
@@ -655,7 +705,9 @@ np_annual_total_native <- np_percent_cover %>%
   full_join(creation_year_df) %>% 
   mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
   mutate(Time_Since = Year - Creation_Year) %>% 
-  mutate(plot_replicate = paste(Plot, Replicate, sep = "-"))
+  mutate(plot_replicate = paste(Plot, Replicate, sep = "-")) %>% 
+  mutate(plot_replicate = paste(Plot, Replicate, sep = "-")) %>% 
+  full_join(hydro)
 
 ### Check for normality
 native_pc_hist <- ggplot(np_annual_total_native, aes(x = max_annual_native_pc)) +
@@ -682,7 +734,7 @@ native_pc_col
 
 
 #### ANOVA of native cover
-native_pc_anova <- aov(max_annual_native_pc ~ as.factor(Time_Since) + Replicate_Zone + as.factor(Time_Since):Replicate_Zone + (1|Year) + (1|as.complex(plot_replicate)), data = np_annual_total_native)
+native_pc_anova <- aov(max_annual_native_pc ~ as.factor(Time_Since) + Replicate_Zone + as.factor(Time_Since):Replicate_Zone + (1|size) + (1|depth) + (1|Year) + (1|as.complex(plot_replicate)), data = np_annual_total_native)
 #summary(native_pc_anova)
 #age, zone sig
 #### Tukey's post-hoc
@@ -693,10 +745,10 @@ native_pc_tukey <- emmeans(native_pc_anova, pairwise ~ as.factor(Time_Since) | R
 #Upland: 2-4 p = 0.1440, 2-5 p = 0.0419, 2-6 p = 0.1973, 2-8 p = 0.1732, 2-9 p = 0.0094
 #### LMER of native cover (continuous)
 native_pc_continuous_lmer <- np_annual_total_native %>% 
-  filter(Replicate_Zone == "C") %>% 
-  lmer((max_annual_native_pc) ~ (Time_Since) + (1|Year) + (1|plot_replicate), data = .)
+  lmer((max_annual_native_pc) ~ (Time_Since) + Replicate_Zone + Time_Since*Replicate_Zone + (1|Year) + (1|size) + (1|depth) + (1|plot_replicate), data = .)
 #summary(native_pc_continuous_lmer)
-#only central sig
+#tab_model(native_pc_continuous_lmer)
+#time*transition, time*upland sig
 #### Check diagnostic graphs
 #E1 <- resid(native_pc_continuous_lmer)
 #F1 <- fitted(native_pc_continuous_lmer)
@@ -747,7 +799,8 @@ max_annual_native_h <- np_percent_cover %>%
   full_join(creation_year_df) %>% 
   mutate(Creation_Year = as.numeric(as.character(Creation_Year))) %>% 
   mutate(Time_Since = Year - Creation_Year) %>% 
-  mutate(plot_replicate = paste(Plot, Replicate, sep = "-"))
+  mutate(plot_replicate = paste(Plot, Replicate, sep = "-")) %>% 
+  full_join(hydro)
 
 ### Exploratory graphs
 native_h_hist <- max_annual_native_h %>% 
@@ -770,45 +823,58 @@ native_h_time_box <- max_annual_native_h %>%
   scale_y_continuous(expand = c(0,0), limits = c(0, 3))
 native_h_time_box
 
-### LMER for native H'
-native_h_lmer <- lmer((max_native_h) ~ as.factor(Time_Since) + Replicate_Zone + as.factor(Time_Since):Replicate_Zone + (1|Year) + (1|plot_replicate), max_annual_native_h)
-#summary(native_h_lmer)
+### GLMER for native H'
+native_h_glmer <- glmer((max_native_h+1) ~ as.factor(Time_Since) + Replicate_Zone + as.factor(Time_Since):Replicate_Zone + (1|Year) + (1|size) + (1|depth) + (1|plot_replicate), family = Gamma(link = "log"), max_annual_native_h)
+#summary(native_h_glmer)
 #some age, zone, age:zone sig
 #### Check diagnostic graphs
-#E1 <- resid(native_h_lmer)
-#F1 <- fitted(native_h_lmer)
+#E1 <- resid(native_h_glmer)
+#F1 <- fitted(native_h_glmer)
 #plot(x=F1, y=E1, xlab="Fitted Model Values", ylab="Pearson Residuals", main="Variance for Native H'") #run 2 lines together -- assessing homoskedasticity -- you want to see no pattern
 #abline(h=0)
 #qqnorm(E1, ylab="Pearson Residuals")
 #qqline(E1) #run 2 lines together -- assess if model residuals are normally distributed
-#qqnorm(ranef(native_h_lmer)$plot_replicate[,1], main = "Pool Residuals")
-#qqline(ranef(native_h_lmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
-#qqnorm(ranef(native_h_lmer)$Year[,1], main = "Monitoring Year Residuals")
-#qqline(ranef(native_h_lmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(native_h_glmer)$plot_replicate[,1], main = "Pool Residuals")
+#qqline(ranef(native_h_glmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(native_h_glmer)$Year[,1], main = "Monitoring Year Residuals")
+#qqline(ranef(native_h_glmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
 #### ANOVA of lmer
-native_h_lmer_anova <- anova(native_h_lmer)
+native_h_glmer_anova <- anova(native_h_glmer)
 #### Tukey's post-hoc of least-squares means
-native_h_lmer_lmer_tukey <- emmeans(native_h_lmer, pairwise ~ as.factor(Time_Since) | Replicate_Zone, adjust = "tukey")
-#plot(native_h_lmer_lmer_tukey)
+native_h_glmer_lmer_tukey <- emmeans(native_h_glmer, pairwise ~ as.factor(Time_Since) | Replicate_Zone, adjust = "tukey")
+#plot(native_h_glmer_lmer_tukey)
 #Central: 2-3 p = 0.0006, 2-4 p = 0.0605, 2-9 p = 0.0642, 3-6 p << 0.001, 3-6 p = 0.0977, 3-7 p = 0.022, 3-8 p = 0.0003, 3-9 p = 0.0002, 4-5 p << 0.001, 4-7 p = 0.0016, 4-8 p = 0.0001, 4-9 p = 0.0001, 5-8 p = 0.0132, 5-9 p = 0.0012, 6-7 p = 0.0061, 6-8 p << 0.001, 6-9 p << 0.001, 7-8 p = 0.0377, 7-9 p = 0.0003
 #Transition: 4-7 p = 0.0753, 5-7 p = 0.0455, 7-8 p = 0.0056, 8-9 p = 0.0097
 #Upland: 2-3 p = 0.0569, 2-4 p = 0.0497, 2-7 p = 0.0255, 3-8 p = 0.1933, 3-9 p = 0.1414, 3-4 p << 0.001, 3-5 p = 0.002, 3-6 p = 0.0479, 3-7 p = 0.0004, 3-8 p = 0.0072, 3-9 p = 0.0110, 4-7 p = 0.0705, 5-7 p = 0.0001, 5-8 p = 0.1666, 5-9 p = 0.0876, 6-7 p << 0.001, 6-8 p = 0.0216, 6-9 p = 0.0127
-native_h_continuous_lmer <- max_annual_native_h %>% 
-  filter(Replicate_Zone == "T") %>% 
-  lmer((max_native_h) ~ (Time_Since) + (1|Year) + (1|plot_replicate), data = .)
-#summary(native_h_continuous_lmer)
-#central, upland slightly sig
+
+
+## Scatterplot for native H', by zone, by time since
+native_h_time_scatter <- max_annual_native_h %>% 
+  ggplot(aes(x = (Time_Since), y = max_native_h)) +
+  geom_point(color = "darkgreen") +
+  geom_smooth(method = lm, se = TRUE, color = "black") +
+  facet_wrap(~Replicate_Zone) +
+  labs(title = "Native Shannon's Index, over time", x = "Age of Pool (years)", y = "Shannon's Index", caption = "Decrease in 3 in central and upland, \n increase around 4, 7, 9 in central and upland \n increase 4, 9 in transition \n (Sig increase in central and upland over time)") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), trans = scales::log_trans(), breaks = c(.1, .10, .20, .30, .40, .50, .60, .70, .80, .90, 1.00, 2, 3))
+#native_h_time_scatter
+
+### Continuous GLMER for native H'
+native_h_continuous_glmer <- glmer((max_native_h+1) ~ (Time_Since) + Replicate_Zone + (Time_Since):Replicate_Zone + (1|Year) + (1|size) + (1|depth) + (1|plot_replicate), family = Gamma(link = "log"), max_annual_native_h)
+#summary(native_h_continuous_glmer)
+#zone, time*transition sig
+#tab_model(native_h_continuous_glmer)
 #### Check diagnostic graphs
-#E1 <- resid(native_h_continuous_lmer)
-#F1 <- fitted(native_h_continuous_lmer)
+#E1 <- resid(native_h_continuous_glmer)
+#F1 <- fitted(native_h_continuous_glmer)
 #plot(x=F1, y=E1, xlab="Fitted Model Values", ylab="Pearson Residuals", main="Variance for Native H'") #run 2 lines together -- assessing homoskedasticity -- you want to see no pattern
 #abline(h=0)
 #qqnorm(E1, ylab="Pearson Residuals")
 #qqline(E1) #run 2 lines together -- assess if model residuals are normally distributed
-#qqnorm(ranef(native_h_continuous_lmer)$plot_replicate[,1], main = "Pool Residuals")
-#qqline(ranef(native_h_continuous_lmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
-#qqnorm(ranef(native_h_continuous_lmer)$Year[,1], main = "Monitoring Year Residuals")
-#qqline(ranef(native_h_continuous_lmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(native_h_continuous_glmer)$plot_replicate[,1], main = "Pool Residuals")
+#qqline(ranef(native_h_continuous_glmer)$plot_replicate[,1]) #run 2 lines together -- assess if random effects residuals are normal
+#qqnorm(ranef(native_h_continuous_glmer)$Year[,1], main = "Monitoring Year Residuals")
+#qqline(ranef(native_h_continuous_glmer)$Year[,1]) #run 2 lines together -- assess if random effects residuals are normal
 
 
 
@@ -828,7 +894,7 @@ np_dominant <- np_percent_cover %>%
 #dominant exotics: FEPE, FEMY, POMO, CETE, BRDI, GEDI, PLCO, POAN, SPSP, BRHO, CRSC, LYHY
 #dominant natives: ELMA, STPU, JUPH, JUME, HOBR, BOMA, CAPR, CYER, JUBU, ERVA, ALSA, JUPA, MALE, SIBE, CEPA, ELTR, EPCA, ELGL, SCPU, SYSU, DEFA, FRSA
 
-## Average natives/nonnatives per zone
+## Average natives and nonnative richness per zone
 np_zone_richness <- np_percent_cover %>%
   filter(Native_Status != "NA") %>% 
   filter(Year > 2016) %>% 
@@ -839,7 +905,9 @@ np_zone_richness <- np_percent_cover %>%
   group_by(Plot, Replicate_Zone, Native_Status) %>% 
   summarize(richness = length(mean)) %>% 
   group_by(Replicate_Zone, Native_Status) %>% 
-  summarize(mean_richness = mean(richness))
+  summarize(mean_richness = mean(richness),
+            min_richness = min(richness),
+            max_richness = max(richness))
 
 
 
